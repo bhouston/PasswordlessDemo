@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { signRegistrationToken } from '@/lib/jwt';
+import { signSignupToken } from '@/lib/jwt';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -43,18 +43,18 @@ const handleSignup = createServerFn({ method: 'POST' })
 		}
 
 		// Generate JWT token
-		const token = await signRegistrationToken(data.name, data.email);
+		const token = await signSignupToken(data.name, data.email);
 
 		// Build verification URL
 		const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-		const verificationUrl = `${baseUrl}/auth/register/${token}`;
+		const verificationUrl = `${baseUrl}/signup/${token}`;
 
 		// Log the URL to console (instead of sending email)
-		console.log('\n=== Registration Verification Link ===');
+		console.log('\n=== Signup Verification Link ===');
 		console.log(`Name: ${data.name}`);
 		console.log(`Email: ${data.email}`);
 		console.log(`Verification URL: ${verificationUrl}`);
-		console.log('=====================================\n');
+		console.log('================================\n');
 
 		return { success: true };
 	});

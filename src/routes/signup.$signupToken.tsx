@@ -1,20 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { verifyRegistrationToken } from '@/lib/jwt';
+import { verifySignupToken } from '@/lib/jwt';
 import { setAuthCookie } from '@/lib/auth';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { FieldSet, FieldGroup, FieldError } from '@/components/ui/field';
 
-export const Route = createFileRoute(
-	'/auth/register/$registrationToken',
-)({
+export const Route = createFileRoute('/signup/$signupToken')({
 	loader: async ({ params }) => {
 		try {
 			// Verify the token
-			const payload = await verifyRegistrationToken(
-				params.registrationToken,
-			);
+			const payload = await verifySignupToken(params.signupToken);
 
 			// Check if user already exists
 			const existingUser = await db
@@ -52,14 +48,14 @@ export const Route = createFileRoute(
 				error:
 					error instanceof Error
 						? error.message
-						: 'Registration failed. The link may be invalid or expired.',
+						: 'Signup failed. The link may be invalid or expired.',
 			};
 		}
 	},
-	component: RegisterPage,
+	component: SignupPage,
 });
 
-function RegisterPage() {
+function SignupPage() {
 	const result = Route.useLoaderData();
 
 	return (
@@ -86,7 +82,7 @@ function RegisterPage() {
 										</svg>
 									</div>
 									<h1 className="text-3xl font-bold text-white mb-2">
-										Registration Confirmed
+										Signup Confirmed
 									</h1>
 									<p className="text-gray-400">
 										Your account has been successfully
@@ -125,11 +121,11 @@ function RegisterPage() {
 										</svg>
 									</div>
 									<h1 className="text-3xl font-bold text-white mb-2">
-										Registration Failed
+										Signup Failed
 									</h1>
 									<FieldError className="mt-4">
 										{result.error ||
-											'The registration link is invalid or has expired. Please request a new verification email.'}
+											'The signup link is invalid or has expired. Please request a new verification email.'}
 									</FieldError>
 								</div>
 							</div>

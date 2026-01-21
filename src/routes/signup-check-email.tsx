@@ -34,7 +34,7 @@ function CheckEmailPage() {
 								<p className="text-gray-400">
 									We've sent a verification link to your email
 									address. Please check your inbox and click
-									the link to complete your registration.
+									the link to complete your signup.
 								</p>
 							</div>
 
@@ -45,7 +45,7 @@ function CheckEmailPage() {
 								<p className="text-xs text-gray-400">
 									The verification URL has been logged to the
 									console. Check your server console to see the
-									registration link.
+									signup link.
 								</p>
 							</div>
 						</div>

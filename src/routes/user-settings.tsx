@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { getAuthCookie } from '@/lib/auth';
 import { db } from '@/db';
-import { users } from '@/db/schema';
+import { users, passkeys } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { PasskeyComponent } from '@/components/PasskeyComponent';
 import {
 	Field,
 	FieldDescription,
@@ -93,15 +94,23 @@ export const Route = createFileRoute('/user-settings')({
 			});
 		}
 
+		// Check if user has a passkey
+		const userPasskey = await db
+			.select()
+			.from(passkeys)
+			.where(eq(passkeys.userId, userIdNum))
+			.limit(1);
+
 		return {
 			user,
+			hasPasskey: userPasskey.length > 0,
 		};
 	},
 	component: UserSettingsPage,
 });
 
 function UserSettingsPage() {
-	const { user } = Route.useLoaderData();
+	const { user, hasPasskey } = Route.useLoaderData();
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -241,6 +250,14 @@ function UserSettingsPage() {
 							</FieldGroup>
 						</FieldSet>
 					</div>
+
+					{/* Passkey Management Card */}
+					<PasskeyComponent
+						userId={user.id}
+						hasPasskey={hasPasskey}
+						userName={user.email}
+						userDisplayName={user.name}
+					/>
 				</div>
 			</div>
 		</div>

@@ -1,10 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { z } from 'zod';
-import { signLoginLinkToken } from '@/lib/jwt';
 import { db } from '@/db';
-import { users } from '@/db/schema';
+import { users, passkeys } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import {
 	FieldSet,
@@ -18,42 +15,6 @@ import { Button } from '@/components/ui/button';
 const loginVerificationSearchSchema = z.object({
 	email: z.string().email('Please provide a valid email address'),
 });
-
-// Server function to generate login link token
-const generateLoginLink = createServerFn({ method: 'POST' })
-	.inputValidator((data: { userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		// Verify user exists
-		const user = await db
-			.select()
-			.from(users)
-			.where(eq(users.id, data.userId))
-			.limit(1);
-
-		if (user.length === 0) {
-			throw new Error('User not found');
-		}
-
-		// Generate JWT token
-		const token = await signLoginLinkToken(data.userId);
-
-		// Build verification URL
-		const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-		const loginUrl = `${baseUrl}/login-via-link/${token}`;
-
-		// Log the URL to console (instead of sending email)
-		console.log('\n=== Login Link ===');
-		console.log(`Email: ${user[0].email}`);
-		console.log(`Login URL: ${loginUrl}`);
-		console.log('==================\n');
-
-		return { success: true };
-	});
 
 export const Route = createFileRoute('/login-verification')({
 	validateSearch: loginVerificationSearchSchema,
@@ -73,9 +34,17 @@ export const Route = createFileRoute('/login-verification')({
 				};
 			}
 
+			// Check if user has a passkey
+			const userPasskey = await db
+				.select()
+				.from(passkeys)
+				.where(eq(passkeys.userId, user[0].id))
+				.limit(1);
+
 			return {
 				success: true,
 				user: user[0],
+				hasPasskey: userPasskey.length > 0,
 			};
 		} catch (error) {
 			return {
@@ -93,24 +62,6 @@ export const Route = createFileRoute('/login-verification')({
 function LoginVerificationPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
-	const [isGenerating, setIsGenerating] = useState(false);
-	const [linkSent, setLinkSent] = useState(false);
-
-	const handleGenerateLink = async () => {
-		if (!result.success || !result.user) {
-			return;
-		}
-
-		setIsGenerating(true);
-		try {
-			await generateLoginLink({ data: { userId: result.user.id } });
-			setLinkSent(true);
-		} catch (error) {
-			console.error('Failed to generate login link:', error);
-		} finally {
-			setIsGenerating(false);
-		}
-	};
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -137,53 +88,44 @@ function LoginVerificationPage() {
 									)}
 								</div>
 
-								{linkSent ? (
-									<div className="mb-6">
-										<div className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-											<svg
-												className="w-8 h-8 text-green-400"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													strokeWidth={2}
-													d="M5 13l4 4L19 7"
-												/>
-											</svg>
-										</div>
-										<p className="text-gray-300 mb-4">
-											Login link has been generated! Check
-											the console for the URL.
-										</p>
+								<div className="space-y-4">
+									{result.hasPasskey && (
 										<Field>
 											<Button
 												onClick={() =>
-													router.navigate({ to: '/' })
+													router.navigate({
+														to: '/login-passkey',
+														search: { email: result.user?.email || '' },
+													})
 												}
 												className="w-full"
 											>
-												Go to Home
+												Login with Passkey
 											</Button>
 										</Field>
-									</div>
-								) : (
-									<div className="space-y-4">
-										<Field>
-											<Button
-												onClick={handleGenerateLink}
-												disabled={isGenerating}
-												className="w-full"
-											>
-												{isGenerating
-													? 'Generating Link...'
-													: 'Login Via Email Link'}
-											</Button>
-										</Field>
-									</div>
-								)}
+									)}
+									{result.hasPasskey && (
+										<div className="flex items-center gap-4 my-4">
+											<div className="flex-1 border-t border-slate-600"></div>
+											<span className="text-sm text-gray-400">or</span>
+											<div className="flex-1 border-t border-slate-600"></div>
+										</div>
+									)}
+									<Field>
+										<Button
+											onClick={() =>
+												router.navigate({
+													to: '/login-check-email',
+													search: { email: result.user?.email || '' },
+												})
+											}
+											className="w-full"
+											variant={result.hasPasskey ? 'outline' : 'default'}
+										>
+											Login Via Email Link
+										</Button>
+									</Field>
+								</div>
 							</div>
 						) : (
 							<div className="text-center">

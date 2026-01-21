@@ -1,14 +1,14 @@
 import { SignJWT, jwtVerify } from 'jose';
 import {
 	JWT_SECRET,
-	REGISTRATION_TOKEN_EXPIRATION,
+	SIGNUP_TOKEN_EXPIRATION,
 	LOGIN_LINK_TOKEN_EXPIRATION,
 } from './constants';
 
 /**
- * Registration token payload
+ * Signup token payload
  */
-export interface RegistrationTokenPayload {
+export interface SignupTokenPayload {
 	name: string;
 	email: string;
 	iat: number;
@@ -25,12 +25,12 @@ export interface LoginLinkTokenPayload {
 }
 
 /**
- * Creates a JWT token for registration verification
+ * Creates a JWT token for signup verification
  * @param name - User's name
  * @param email - User's email
  * @returns Signed JWT token string
  */
-export async function signRegistrationToken(
+export async function signSignupToken(
 	name: string,
 	email: string,
 ): Promise<string> {
@@ -40,20 +40,20 @@ export async function signRegistrationToken(
 	const token = await new SignJWT({ name, email })
 		.setProtectedHeader({ alg: 'HS256' })
 		.setIssuedAt(now)
-		.setExpirationTime(now + REGISTRATION_TOKEN_EXPIRATION)
+		.setExpirationTime(now + SIGNUP_TOKEN_EXPIRATION)
 		.sign(secret);
 
 	return token;
 }
 
 /**
- * Verifies and extracts payload from a registration token
+ * Verifies and extracts payload from a signup token
  * @param token - JWT token string
  * @returns Token payload if valid, throws error if invalid/expired
  */
-export async function verifyRegistrationToken(
+export async function verifySignupToken(
 	token: string,
-): Promise<RegistrationTokenPayload> {
+): Promise<SignupTokenPayload> {
 	const secret = new TextEncoder().encode(JWT_SECRET);
 
 	try {

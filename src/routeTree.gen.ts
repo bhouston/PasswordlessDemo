@@ -13,14 +13,16 @@ import { Route as UserSettingsRouteImport } from './routes/user-settings'
 import { Route as SignupCheckEmailRouteImport } from './routes/signup-check-email'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginVerificationRouteImport } from './routes/login-verification'
+import { Route as LoginPasskeyRouteImport } from './routes/login-passkey'
+import { Route as LoginCheckEmailRouteImport } from './routes/login-check-email'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignupSignupTokenRouteImport } from './routes/signup.$signupToken'
 import { Route as LoginViaLinkLoginLinkTokenRouteImport } from './routes/login-via-link.$loginLinkToken'
 import { Route as DemoDbExampleRouteImport } from './routes/demo/db-example'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
-import { Route as AuthRegisterRegistrationTokenRouteImport } from './routes/auth/register.$registrationToken'
 import { Route as DemoStartSsrIndexRouteImport } from './routes/demo/start.ssr.index'
 import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr.spa-mode'
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
@@ -46,6 +48,16 @@ const LoginVerificationRoute = LoginVerificationRouteImport.update({
   path: '/login-verification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginPasskeyRoute = LoginPasskeyRouteImport.update({
+  id: '/login-passkey',
+  path: '/login-passkey',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginCheckEmailRoute = LoginCheckEmailRouteImport.update({
+  id: '/login-check-email',
+  path: '/login-check-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -55,6 +67,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SignupSignupTokenRoute = SignupSignupTokenRouteImport.update({
+  id: '/$signupToken',
+  path: '/$signupToken',
+  getParentRoute: () => SignupRoute,
 } as any)
 const LoginViaLinkLoginLinkTokenRoute =
   LoginViaLinkLoginLinkTokenRouteImport.update({
@@ -82,12 +99,6 @@ const DemoApiNamesRoute = DemoApiNamesRouteImport.update({
   path: '/demo/api/names',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRegisterRegistrationTokenRoute =
-  AuthRegisterRegistrationTokenRouteImport.update({
-    id: '/auth/register/$registrationToken',
-    path: '/auth/register/$registrationToken',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const DemoStartSsrIndexRoute = DemoStartSsrIndexRouteImport.update({
   id: '/demo/start/ssr/',
   path: '/demo/start/ssr/',
@@ -112,13 +123,15 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/login-check-email': typeof LoginCheckEmailRoute
+  '/login-passkey': typeof LoginPasskeyRoute
   '/login-verification': typeof LoginVerificationRoute
-  '/signup': typeof SignupRoute
+  '/signup': typeof SignupRouteWithChildren
   '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
-  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
+  '/signup/$signupToken': typeof SignupSignupTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -130,13 +143,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/login-check-email': typeof LoginCheckEmailRoute
+  '/login-passkey': typeof LoginPasskeyRoute
   '/login-verification': typeof LoginVerificationRoute
-  '/signup': typeof SignupRoute
+  '/signup': typeof SignupRouteWithChildren
   '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
-  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
+  '/signup/$signupToken': typeof SignupSignupTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -149,13 +164,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/login-check-email': typeof LoginCheckEmailRoute
+  '/login-passkey': typeof LoginPasskeyRoute
   '/login-verification': typeof LoginVerificationRoute
-  '/signup': typeof SignupRoute
+  '/signup': typeof SignupRouteWithChildren
   '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
-  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
+  '/signup/$signupToken': typeof SignupSignupTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -169,13 +186,15 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/login-check-email'
+    | '/login-passkey'
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
     | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
-    | '/auth/register/$registrationToken'
+    | '/signup/$signupToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -187,13 +206,15 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/login-check-email'
+    | '/login-passkey'
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
     | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
-    | '/auth/register/$registrationToken'
+    | '/signup/$signupToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -205,13 +226,15 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/login'
+    | '/login-check-email'
+    | '/login-passkey'
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
     | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
-    | '/auth/register/$registrationToken'
+    | '/signup/$signupToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -224,13 +247,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  LoginCheckEmailRoute: typeof LoginCheckEmailRoute
+  LoginPasskeyRoute: typeof LoginPasskeyRoute
   LoginVerificationRoute: typeof LoginVerificationRoute
-  SignupRoute: typeof SignupRoute
+  SignupRoute: typeof SignupRouteWithChildren
   SignupCheckEmailRoute: typeof SignupCheckEmailRoute
   UserSettingsRoute: typeof UserSettingsRoute
   DemoDbExampleRoute: typeof DemoDbExampleRoute
   LoginViaLinkLoginLinkTokenRoute: typeof LoginViaLinkLoginLinkTokenRoute
-  AuthRegisterRegistrationTokenRoute: typeof AuthRegisterRegistrationTokenRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
   DemoStartServerFuncsRoute: typeof DemoStartServerFuncsRoute
@@ -270,6 +294,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginVerificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login-passkey': {
+      id: '/login-passkey'
+      path: '/login-passkey'
+      fullPath: '/login-passkey'
+      preLoaderRoute: typeof LoginPasskeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login-check-email': {
+      id: '/login-check-email'
+      path: '/login-check-email'
+      fullPath: '/login-check-email'
+      preLoaderRoute: typeof LoginCheckEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -283,6 +321,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/signup/$signupToken': {
+      id: '/signup/$signupToken'
+      path: '/$signupToken'
+      fullPath: '/signup/$signupToken'
+      preLoaderRoute: typeof SignupSignupTokenRouteImport
+      parentRoute: typeof SignupRoute
     }
     '/login-via-link/$loginLinkToken': {
       id: '/login-via-link/$loginLinkToken'
@@ -319,13 +364,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoApiNamesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/register/$registrationToken': {
-      id: '/auth/register/$registrationToken'
-      path: '/auth/register/$registrationToken'
-      fullPath: '/auth/register/$registrationToken'
-      preLoaderRoute: typeof AuthRegisterRegistrationTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/demo/start/ssr/': {
       id: '/demo/start/ssr/'
       path: '/demo/start/ssr'
@@ -357,16 +395,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SignupRouteChildren {
+  SignupSignupTokenRoute: typeof SignupSignupTokenRoute
+}
+
+const SignupRouteChildren: SignupRouteChildren = {
+  SignupSignupTokenRoute: SignupSignupTokenRoute,
+}
+
+const SignupRouteWithChildren =
+  SignupRoute._addFileChildren(SignupRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  LoginCheckEmailRoute: LoginCheckEmailRoute,
+  LoginPasskeyRoute: LoginPasskeyRoute,
   LoginVerificationRoute: LoginVerificationRoute,
-  SignupRoute: SignupRoute,
+  SignupRoute: SignupRouteWithChildren,
   SignupCheckEmailRoute: SignupCheckEmailRoute,
   UserSettingsRoute: UserSettingsRoute,
   DemoDbExampleRoute: DemoDbExampleRoute,
   LoginViaLinkLoginLinkTokenRoute: LoginViaLinkLoginLinkTokenRoute,
-  AuthRegisterRegistrationTokenRoute: AuthRegisterRegistrationTokenRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,
   DemoStartServerFuncsRoute: DemoStartServerFuncsRoute,
