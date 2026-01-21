@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -6,8 +6,7 @@ import {
 	generateRegistrationOptions,
 	verifyRegistrationResponse,
 	deletePasskey,
-} from '@/lib/passkey';
-import { getAuthCookie } from '@/lib/auth';
+} from '@/server/passkey';
 import {
 	Field,
 	FieldError,
@@ -23,82 +22,6 @@ interface PasskeyComponentProps {
 	userDisplayName: string;
 }
 
-// Server function to verify registration
-const verifyPasskeyRegistration = createServerFn({ method: 'POST' })
-	.inputValidator((data: { response: unknown; userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		if (!data.response) {
-			throw new Error('Invalid response');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		const cookieUserId = getAuthCookie();
-		if (!cookieUserId || parseInt(cookieUserId, 10) !== data.userId) {
-			throw new Error('Not authenticated');
-		}
-
-		return await verifyRegistrationResponse(
-			data.response,
-			data.userId,
-		);
-	});
-
-// Server function to delete passkey
-const deleteUserPasskey = createServerFn({ method: 'POST' })
-	.inputValidator((data: { userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		const cookieUserId = getAuthCookie();
-		if (!cookieUserId || parseInt(cookieUserId, 10) !== data.userId) {
-			throw new Error('Not authenticated');
-		}
-
-		await deletePasskey(data.userId);
-		return { success: true };
-	});
-
-// Server function to generate registration options (with user info)
-const generateRegistrationOptionsServer = createServerFn({
-	method: 'POST',
-})
-	.inputValidator(
-		(data: {
-			userId: number;
-			userName: string;
-			userDisplayName: string;
-		}) => {
-			if (!data.userId || typeof data.userId !== 'number') {
-				throw new Error('Invalid user ID');
-			}
-			if (!data.userName || typeof data.userName !== 'string') {
-				throw new Error('Invalid user name');
-			}
-			if (!data.userDisplayName || typeof data.userDisplayName !== 'string') {
-				throw new Error('Invalid user display name');
-			}
-			return data;
-		},
-	)
-	.handler(async ({ data }) => {
-		const cookieUserId = getAuthCookie();
-		if (!cookieUserId || parseInt(cookieUserId, 10) !== data.userId) {
-			throw new Error('Not authenticated');
-		}
-
-		return await generateRegistrationOptions(
-			data.userId,
-			data.userName,
-			data.userDisplayName,
-		);
-	});
-
 export function PasskeyComponent({
 	userId,
 	hasPasskey,
@@ -109,6 +32,9 @@ export function PasskeyComponent({
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
+	const generateRegistrationOptionsFn = useServerFn(generateRegistrationOptions);
+	const verifyRegistrationResponseFn = useServerFn(verifyRegistrationResponse);
+	const deletePasskeyFn = useServerFn(deletePasskey);
 
 	const handleAddPasskey = async () => {
 		setIsLoading(true);
@@ -117,7 +43,7 @@ export function PasskeyComponent({
 
 		try {
 			// Generate registration options from server
-			const options = await generateRegistrationOptionsServer({
+			const options = await generateRegistrationOptionsFn({
 				data: {
 					userId,
 					userName,
@@ -131,7 +57,7 @@ export function PasskeyComponent({
 			});
 
 			// Verify registration on server
-			const verification = await verifyPasskeyRegistration({
+			const verification = await verifyRegistrationResponseFn({
 				data: {
 					response: registrationResponse,
 					userId,
@@ -181,7 +107,7 @@ export function PasskeyComponent({
 		setSuccessMessage(null);
 
 		try {
-			await deleteUserPasskey({ data: { userId } });
+			await deletePasskeyFn({ data: { userId } });
 			setSuccessMessage('Passkey deleted successfully!');
 			// Invalidate router to refresh data
 			router.invalidate();

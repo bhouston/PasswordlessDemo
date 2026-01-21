@@ -1,57 +1,22 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { verifyLoginLinkToken } from '@/lib/jwt';
-import { setAuthCookie } from '@/lib/auth';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { verifyLoginLinkTokenAndAuthenticate } from '@/server/auth';
 import { FieldSet, FieldGroup, FieldError, Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 
 export const Route = createFileRoute(
 	'/login-via-link/$loginLinkToken',
 )({
-	loader: async ({ params }) => {
-		try {
-			// Verify the token
-			const payload = await verifyLoginLinkToken(params.loginLinkToken);
-
-			// Verify user exists in database
-			const user = await db
-				.select()
-				.from(users)
-				.where(eq(users.id, payload.userId))
-				.limit(1);
-
-			if (user.length === 0) {
-				return {
-					success: false,
-					error: 'User not found',
-				};
-			}
-
-			// Set authentication cookie
-			setAuthCookie(payload.userId);
-
-			return {
-				success: true,
-				user: user[0],
-			};
-		} catch (error) {
-			return {
-				success: false,
-				error:
-					error instanceof Error
-						? error.message
-						: 'Login failed. The link may be invalid or expired.',
-			};
-		}
+	beforeLoad: async ({ params }) => {
+		// Verify token and authenticate user in beforeLoad
+		// This ensures user is authenticated before route loads
+		return await verifyLoginLinkTokenAndAuthenticate({ data: { token: params.loginLinkToken } });
 	},
 	component: LoginViaLinkPage,
 });
 
 function LoginViaLinkPage() {
 	const router = useRouter();
-	const result = Route.useLoaderData();
+	const result = Route.useBeforeLoadData();
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">

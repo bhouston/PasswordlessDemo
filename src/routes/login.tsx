@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -13,9 +13,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { checkUserExists } from '@/server/auth';
 
 // Zod schema for form validation
 const loginSchema = z.object({
@@ -24,28 +22,6 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-// Server function to check if user exists
-const checkUserExists = createServerFn({ method: 'POST' })
-	.inputValidator((data: LoginFormData) => {
-		return loginSchema.parse(data);
-	})
-	.handler(async ({ data }) => {
-		const existingUser = await db
-			.select()
-			.from(users)
-			.where(eq(users.email, data.email))
-			.limit(1);
-
-		if (existingUser.length === 0) {
-			throw new Error('No account found with this email address');
-		}
-
-		return {
-			exists: true,
-			userId: existingUser[0].id,
-		};
-	});
-
 export const Route = createFileRoute('/login')({
 	component: LoginPage,
 });
@@ -53,6 +29,7 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
 	const router = useRouter();
 	const [submitError, setSubmitError] = useState<string | null>(null);
+	const checkUserExistsFn = useServerFn(checkUserExists);
 
 	const form = useForm<LoginFormData>({
 		defaultValues: {
@@ -64,7 +41,7 @@ function LoginPage() {
 		onSubmit: async ({ value }) => {
 			setSubmitError(null);
 			try {
-				await checkUserExists({ data: value });
+				await checkUserExistsFn({ data: value });
 				// Navigate to verification page with email as search param
 				router.navigate({
 					to: '/login-verification',

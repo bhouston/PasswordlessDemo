@@ -1,11 +1,9 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
-import { signLoginLinkToken } from '@/lib/jwt';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getUserByEmail } from '@/server/user';
+import { generateLoginLink } from '@/server/auth';
 import { FieldSet, FieldGroup, Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 
@@ -14,54 +12,14 @@ const loginCheckEmailSearchSchema = z.object({
 	email: z.string().email('Please provide a valid email address'),
 });
 
-// Server function to generate login link token
-const generateLoginLink = createServerFn({ method: 'POST' })
-	.inputValidator((data: { userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		// Verify user exists
-		const user = await db
-			.select()
-			.from(users)
-			.where(eq(users.id, data.userId))
-			.limit(1);
-
-		if (user.length === 0) {
-			throw new Error('User not found');
-		}
-
-		// Generate JWT token
-		const token = await signLoginLinkToken(data.userId);
-
-		// Build verification URL
-		const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-		const loginUrl = `${baseUrl}/login-via-link/${token}`;
-
-		// Log the URL to console (instead of sending email)
-		console.log('\n=== Login Link ===');
-		console.log(`Email: ${user[0].email}`);
-		console.log(`Login URL: ${loginUrl}`);
-		console.log('==================\n');
-
-		return { success: true };
-	});
-
 export const Route = createFileRoute('/login-check-email')({
 	validateSearch: loginCheckEmailSearchSchema,
 	loaderDeps: ({ search }) => ({ email: search.email }),
 	loader: async ({ deps }) => {
 		try {
-			const user = await db
-				.select()
-				.from(users)
-				.where(eq(users.email, deps.email))
-				.limit(1);
+			const user = await getUserByEmail({ data: { email: deps.email } });
 
-			if (user.length === 0) {
+			if (!user) {
 				return {
 					success: false,
 					error: 'No account found with this email address',
@@ -70,7 +28,7 @@ export const Route = createFileRoute('/login-check-email')({
 
 			return {
 				success: true,
-				user: user[0],
+				user,
 			};
 		} catch (error) {
 			return {
@@ -89,11 +47,12 @@ function LoginCheckEmailPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
 	const [linkSent, setLinkSent] = useState(false);
+	const generateLoginLinkFn = useServerFn(generateLoginLink);
 
 	// Auto-send login link on page load
 	useEffect(() => {
 		if (result.success && result.user && !linkSent) {
-			generateLoginLink({ data: { userId: result.user.id } })
+			generateLoginLinkFn({ data: { userId: result.user.id } })
 				.then(() => {
 					setLinkSent(true);
 				})
@@ -101,7 +60,7 @@ function LoginCheckEmailPage() {
 					console.error('Failed to generate login link:', error);
 				});
 		}
-	}, [result.success, result.user, linkSent]);
+	}, [result.success, result.user, linkSent, generateLoginLinkFn]);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">

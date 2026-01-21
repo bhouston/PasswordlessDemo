@@ -1,12 +1,9 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import { z } from 'zod';
-import { getAuthCookie } from '@/lib/auth';
-import { db } from '@/db';
-import { users, passkeys } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getUserWithPasskey, updateUserName } from '@/server/user';
 import { PasskeyComponent } from '@/components/PasskeyComponent';
 import {
 	Field,
@@ -26,85 +23,19 @@ const userDetailsSchema = z.object({
 
 type UserDetailsFormData = z.infer<typeof userDetailsSchema>;
 
-// Server function to update user name
-const updateUserName = createServerFn({ method: 'POST' })
-	.inputValidator((data: UserDetailsFormData) => {
-		return userDetailsSchema.parse(data);
-	})
-	.handler(async ({ data }) => {
-		const userId = getAuthCookie();
-		if (!userId) {
-			throw new Error('Not authenticated');
-		}
-
-		const userIdNum = parseInt(userId, 10);
-		if (isNaN(userIdNum)) {
-			throw new Error('Invalid user ID');
-		}
-
-		const [updatedUser] = await db
-			.update(users)
-			.set({ name: data.name })
-			.where(eq(users.id, userIdNum))
-			.returning();
-
-		if (!updatedUser) {
-			throw new Error('User not found');
-		}
-
-		return {
-			success: true,
-			user: updatedUser,
-		};
-	});
-
 export const Route = createFileRoute('/user-settings')({
-	beforeLoad: async () => {
-		const userId = getAuthCookie();
-		if (!userId) {
-			throw redirect({
-				to: '/login',
-			});
-		}
-	},
 	loader: async () => {
-		const userId = getAuthCookie();
-		if (!userId) {
+		try {
+			// Call server function directly - it can be invoked from loaders
+			// Server functions are called with an object, even if empty
+			const result = await getUserWithPasskey({});
+			return result;
+		} catch (error) {
+			// If user is not authenticated, redirect to login
 			throw redirect({
 				to: '/login',
 			});
 		}
-
-		const userIdNum = parseInt(userId, 10);
-		if (isNaN(userIdNum)) {
-			throw redirect({
-				to: '/login',
-			});
-		}
-
-		const [user] = await db
-			.select()
-			.from(users)
-			.where(eq(users.id, userIdNum))
-			.limit(1);
-
-		if (!user) {
-			throw redirect({
-				to: '/login',
-			});
-		}
-
-		// Check if user has a passkey
-		const userPasskey = await db
-			.select()
-			.from(passkeys)
-			.where(eq(passkeys.userId, userIdNum))
-			.limit(1);
-
-		return {
-			user,
-			hasPasskey: userPasskey.length > 0,
-		};
 	},
 	component: UserSettingsPage,
 });
@@ -113,6 +44,7 @@ function UserSettingsPage() {
 	const { user, hasPasskey } = Route.useLoaderData();
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
+	const updateUserNameFn = useServerFn(updateUserName);
 
 	const form = useForm<UserDetailsFormData>({
 		defaultValues: {
@@ -125,7 +57,7 @@ function UserSettingsPage() {
 			setSubmitError(null);
 			setSuccessMessage(null);
 			try {
-				const result = await updateUserName({ data: value });
+				const result = await updateUserNameFn({ data: value });
 				if (result.success) {
 					setSuccessMessage('User details saved successfully!');
 					// Update form default values to reflect the saved state

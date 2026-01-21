@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { z } from 'zod';
 import {
@@ -12,10 +12,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { signSignupToken } from '@/lib/jwt';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { signup } from '@/server/auth';
 
 // Zod schema for form validation
 const signupSchema = z.object({
@@ -25,46 +22,13 @@ const signupSchema = z.object({
 
 type SignupFormData = z.infer<typeof signupSchema>;
 
-// Server function to handle signup
-const handleSignup = createServerFn({ method: 'POST' })
-	.inputValidator((data: SignupFormData) => {
-		return signupSchema.parse(data);
-	})
-	.handler(async ({ data }) => {
-		// Check if email already exists
-		const existingUser = await db
-			.select()
-			.from(users)
-			.where(eq(users.email, data.email))
-			.limit(1);
-
-		if (existingUser.length > 0) {
-			throw new Error('An account with this email already exists');
-		}
-
-		// Generate JWT token
-		const token = await signSignupToken(data.name, data.email);
-
-		// Build verification URL
-		const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-		const verificationUrl = `${baseUrl}/signup/${token}`;
-
-		// Log the URL to console (instead of sending email)
-		console.log('\n=== Signup Verification Link ===');
-		console.log(`Name: ${data.name}`);
-		console.log(`Email: ${data.email}`);
-		console.log(`Verification URL: ${verificationUrl}`);
-		console.log('================================\n');
-
-		return { success: true };
-	});
-
 export const Route = createFileRoute('/signup')({
 	component: SignupPage,
 });
 
 function SignupPage() {
 	const router = useRouter();
+	const signupFn = useServerFn(signup);
 
 	const form = useForm<SignupFormData>({
 		defaultValues: {
@@ -76,7 +40,7 @@ function SignupPage() {
 		},
 		onSubmit: async ({ value }) => {
 			try {
-				await handleSignup({ data: value });
+				await signupFn({ data: value });
 				// Navigate to check-email page on success
 				router.navigate({ to: '/signup-check-email' });
 			} catch (error) {

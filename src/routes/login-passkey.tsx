@@ -1,16 +1,13 @@
 import { createFileRoute, useRouter, redirect } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
+import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { z } from 'zod';
 import { startAuthentication } from '@simplewebauthn/browser';
 import {
 	generateAuthenticationOptions,
 	verifyAuthenticationResponse,
-} from '@/lib/passkey';
-import { setAuthCookie } from '@/lib/auth';
-import { db } from '@/db';
-import { users, passkeys } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+} from '@/server/passkey';
+import { getUserByEmail, userHasPasskey } from '@/server/user';
 import {
 	FieldSet,
 	FieldGroup,
@@ -24,61 +21,14 @@ const loginPasskeySearchSchema = z.object({
 	email: z.string().email('Please provide a valid email address'),
 });
 
-// Server function to initiate passkey login
-const initiatePasskeyLogin = createServerFn({ method: 'POST' })
-	.inputValidator((data: { userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		const options = await generateAuthenticationOptions(data.userId);
-		if (!options) {
-			throw new Error('No passkey found for this user');
-		}
-		return options;
-	});
-
-// Server function to verify passkey login
-const verifyPasskeyLogin = createServerFn({ method: 'POST' })
-	.inputValidator((data: { response: unknown; userId: number }) => {
-		if (!data.userId || typeof data.userId !== 'number') {
-			throw new Error('Invalid user ID');
-		}
-		if (!data.response) {
-			throw new Error('Invalid response');
-		}
-		return data;
-	})
-	.handler(async ({ data }) => {
-		const verification = await verifyAuthenticationResponse(
-			data.response,
-			data.userId,
-		);
-
-		if (!verification.success) {
-			throw new Error(verification.error || 'Authentication failed');
-		}
-
-		// Set authentication cookie
-		setAuthCookie(data.userId);
-
-		return { success: true };
-	});
-
 export const Route = createFileRoute('/login-passkey')({
 	validateSearch: loginPasskeySearchSchema,
 	loaderDeps: ({ search }) => ({ email: search.email }),
 	loader: async ({ deps }) => {
 		try {
-			const user = await db
-				.select()
-				.from(users)
-				.where(eq(users.email, deps.email))
-				.limit(1);
+			const user = await getUserByEmail({ data: { email: deps.email } });
 
-			if (user.length === 0) {
+			if (!user) {
 				throw redirect({
 					to: '/login-verification',
 					search: { email: deps.email },
@@ -86,13 +36,9 @@ export const Route = createFileRoute('/login-passkey')({
 			}
 
 			// Check if user has a passkey
-			const userPasskey = await db
-				.select()
-				.from(passkeys)
-				.where(eq(passkeys.userId, user[0].id))
-				.limit(1);
+			const hasPasskey = await userHasPasskey({ data: { userId: user.id } });
 
-			if (userPasskey.length === 0) {
+			if (!hasPasskey) {
 				// Redirect back to verification page if no passkey
 				throw redirect({
 					to: '/login-verification',
@@ -102,7 +48,7 @@ export const Route = createFileRoute('/login-passkey')({
 
 			return {
 				success: true,
-				user: user[0],
+				user,
 			};
 		} catch (error) {
 			// Re-throw redirects
@@ -123,6 +69,8 @@ function LoginPasskeyPage() {
 	const result = Route.useLoaderData();
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const generateAuthOptionsFn = useServerFn(generateAuthenticationOptions);
+	const verifyAuthResponseFn = useServerFn(verifyAuthenticationResponse);
 
 	const handlePasskeyLogin = async () => {
 		if (!result.success || !result.user) {
@@ -134,9 +82,13 @@ function LoginPasskeyPage() {
 
 		try {
 			// Get authentication options from server
-			const options = await initiatePasskeyLogin({
+			const options = await generateAuthOptionsFn({
 				data: { userId: result.user.id },
 			});
+
+			if (!options) {
+				throw new Error('No passkey found for this user');
+			}
 
 			// Start authentication on client
 			const authenticationResponse = await startAuthentication({
@@ -144,12 +96,16 @@ function LoginPasskeyPage() {
 			});
 
 			// Verify authentication on server
-			await verifyPasskeyLogin({
+			const verification = await verifyAuthResponseFn({
 				data: {
 					response: authenticationResponse,
 					userId: result.user.id,
 				},
 			});
+
+			if (!verification.success) {
+				throw new Error(verification.error || 'Authentication failed');
+			}
 
 			// Redirect to user settings on success
 			router.navigate({ to: '/user-settings' });

@@ -1,9 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose';
-import {
-	JWT_SECRET,
-	SIGNUP_TOKEN_EXPIRATION,
-	LOGIN_LINK_TOKEN_EXPIRATION,
-} from './constants';
+import { getEnvConfig } from './env';
+
+// Token expiration times (in seconds)
+const SIGNUP_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
+const LOGIN_LINK_TOKEN_EXPIRATION = 60 * 60; // 1 hour
 
 /**
  * Signup token payload
@@ -34,7 +34,8 @@ export async function signSignupToken(
 	name: string,
 	email: string,
 ): Promise<string> {
-	const secret = new TextEncoder().encode(JWT_SECRET);
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
 	const now = Math.floor(Date.now() / 1000);
 
 	const token = await new SignJWT({ name, email })
@@ -54,7 +55,8 @@ export async function signSignupToken(
 export async function verifySignupToken(
 	token: string,
 ): Promise<SignupTokenPayload> {
-	const secret = new TextEncoder().encode(JWT_SECRET);
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
 
 	try {
 		const { payload } = await jwtVerify(token, secret, {
@@ -89,7 +91,8 @@ export async function verifySignupToken(
  * @returns Signed JWT token string
  */
 export async function signLoginLinkToken(userId: number): Promise<string> {
-	const secret = new TextEncoder().encode(JWT_SECRET);
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
 	const now = Math.floor(Date.now() / 1000);
 
 	const token = await new SignJWT({ userId })
@@ -109,7 +112,8 @@ export async function signLoginLinkToken(userId: number): Promise<string> {
 export async function verifyLoginLinkToken(
 	token: string,
 ): Promise<LoginLinkTokenPayload> {
-	const secret = new TextEncoder().encode(JWT_SECRET);
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
 
 	try {
 		const { payload } = await jwtVerify(token, secret, {

@@ -1,62 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { verifySignupToken } from '@/lib/jwt';
-import { setAuthCookie } from '@/lib/auth';
-import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { verifySignupTokenAndCreateUser } from '@/server/auth';
 import { FieldSet, FieldGroup, FieldError } from '@/components/ui/field';
 
 export const Route = createFileRoute('/signup/$signupToken')({
-	loader: async ({ params }) => {
-		try {
-			// Verify the token
-			const payload = await verifySignupToken(params.signupToken);
-
-			// Check if user already exists
-			const existingUser = await db
-				.select()
-				.from(users)
-				.where(eq(users.email, payload.email))
-				.limit(1);
-
-			if (existingUser.length > 0) {
-				return {
-					success: false,
-					error: 'An account with this email already exists',
-				};
-			}
-
-			// Create the user
-			const [newUser] = await db
-				.insert(users)
-				.values({
-					name: payload.name,
-					email: payload.email,
-				})
-				.returning();
-
-			// Set authentication cookie
-			setAuthCookie(newUser.id);
-
-			return {
-				success: true,
-				user: newUser,
-			};
-		} catch (error) {
-			return {
-				success: false,
-				error:
-					error instanceof Error
-						? error.message
-						: 'Signup failed. The link may be invalid or expired.',
-			};
-		}
+	beforeLoad: async ({ params }) => {
+		// Verify token and create user in beforeLoad
+		// This ensures user is created before route loads
+		return await verifySignupTokenAndCreateUser({ data: { token: params.signupToken } });
 	},
 	component: SignupPage,
 });
 
 function SignupPage() {
-	const result = Route.useLoaderData();
+	const result = Route.useBeforeLoadData();
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">

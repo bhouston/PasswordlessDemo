@@ -1,8 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { z } from 'zod';
-import { db } from '@/db';
-import { users, passkeys } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getUserByEmail, userHasPasskey } from '@/server/user';
 import {
 	FieldSet,
 	FieldGroup,
@@ -21,13 +19,9 @@ export const Route = createFileRoute('/login-verification')({
 	loaderDeps: ({ search }) => ({ email: search.email }),
 	loader: async ({ deps }) => {
 		try {
-			const user = await db
-				.select()
-				.from(users)
-				.where(eq(users.email, deps.email))
-				.limit(1);
+			const user = await getUserByEmail({ data: { email: deps.email } });
 
-			if (user.length === 0) {
+			if (!user) {
 				return {
 					success: false,
 					error: 'No account found with this email address',
@@ -35,16 +29,12 @@ export const Route = createFileRoute('/login-verification')({
 			}
 
 			// Check if user has a passkey
-			const userPasskey = await db
-				.select()
-				.from(passkeys)
-				.where(eq(passkeys.userId, user[0].id))
-				.limit(1);
+			const hasPasskey = await userHasPasskey({ data: { userId: user.id } });
 
 			return {
 				success: true,
-				user: user[0],
-				hasPasskey: userPasskey.length > 0,
+				user,
+				hasPasskey,
 			};
 		} catch (error) {
 			return {
