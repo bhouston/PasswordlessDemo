@@ -1,6 +1,9 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { z } from 'zod';
 import { getUserByEmail, userHasPasskey } from '@/server/user';
+import { initiatePasskeyLogin } from '@/server/passkey';
 import {
 	FieldSet,
 	FieldGroup,
@@ -52,6 +55,41 @@ export const Route = createFileRoute('/login-verification')({
 function LoginVerificationPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const initiatePasskeyLoginFn = useServerFn(initiatePasskeyLogin);
+
+	const handlePasskeyLogin = async () => {
+		if (!result.success || !result.user) {
+			return;
+		}
+
+		setIsLoading(true);
+		setError(null);
+
+		try {
+			const response = await initiatePasskeyLoginFn({
+				data: { email: result.user.email },
+			});
+
+			if (!response.success) {
+				throw new Error(response.error || 'Failed to initiate passkey login');
+			}
+
+			// Redirect to token-based route
+			router.navigate({
+				to: '/login-passkey/$passkeyToken',
+				params: { passkeyToken: response.token },
+			});
+		} catch (err) {
+			setError(
+				err instanceof Error
+					? err.message
+					: 'Failed to initiate passkey login. Please try again.',
+			);
+			setIsLoading(false);
+		}
+	};
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -78,19 +116,21 @@ function LoginVerificationPage() {
 									)}
 								</div>
 
+								{error && (
+									<FieldError className="mb-4">{error}</FieldError>
+								)}
+
 								<div className="space-y-4">
 									{result.hasPasskey && (
 										<Field>
 											<Button
-												onClick={() =>
-													router.navigate({
-														to: '/login-passkey',
-														search: { email: result.user?.email || '' },
-													})
-												}
+												onClick={handlePasskeyLogin}
+												disabled={isLoading}
 												className="w-full"
 											>
-												Login with Passkey
+												{isLoading
+													? 'Preparing passkey login...'
+													: 'Login with Passkey'}
 											</Button>
 										</Field>
 									)}

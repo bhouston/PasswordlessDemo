@@ -18,6 +18,10 @@ import { users, passkeys } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireUser } from './middleware';
 import { setAuthCookie } from '@/lib/auth';
+import {
+	signPasskeyChallengeToken,
+	verifyPasskeyChallengeToken,
+} from './jwt';
 
 /**
  * Challenge expiration time (5 minutes in milliseconds)
@@ -234,6 +238,8 @@ const generateAuthenticationOptionsSchema = z.object({
 
 /**
  * Server function to generate authentication options for passkey login
+ * NOTE: This is kept for backward compatibility but is no longer used in the authentication flow.
+ * The new flow uses initiatePasskeyLogin instead.
  */
 export const generateAuthenticationOptions = createServerFn({ method: 'POST' })
 	.inputValidator((data: unknown) => generateAuthenticationOptionsSchema.parse(data))
@@ -275,32 +281,193 @@ export const generateAuthenticationOptions = createServerFn({ method: 'POST' })
 		return options;
 	});
 
+const initiatePasskeyLoginSchema = z.object({
+	email: z.string().email(),
+});
+
+/**
+ * Server function to initiate passkey login by generating authentication options and JWT token
+ * This replaces the old flow that stored challenges in the database
+ */
+export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
+	.inputValidator((data: unknown) => initiatePasskeyLoginSchema.parse(data))
+	.handler(async ({ data }) => {
+		// Fetch user by email
+		const [user] = await db
+			.select()
+			.from(users)
+			.where(eq(users.email, data.email))
+			.limit(1);
+
+		if (!user) {
+			return {
+				success: false,
+				error: 'User not found',
+			};
+		}
+
+		// Check if user has a passkey
+		const userPasskey = await db
+			.select()
+			.from(passkeys)
+			.where(eq(passkeys.userId, user.id))
+			.limit(1);
+
+		if (userPasskey.length === 0) {
+			return {
+				success: false,
+				error: 'No passkey found for this user',
+			};
+		}
+
+		const passkey = userPasskey[0];
+		const transports = passkey.transports
+			? (JSON.parse(passkey.transports) as string[])
+			: undefined;
+
+		const env = getEnvConfig();
+		const opts: GenerateAuthenticationOptionsOpts = {
+			rpID: env.RP_ID,
+			timeout: 60000, // 60 seconds
+			allowCredentials: [
+				{
+					id: passkey.credentialId,
+					transports: transports as any,
+				},
+			],
+			userVerification: 'required',
+		};
+
+		const options = await swaGenerateAuthenticationOptions(opts);
+
+		// Create JWT token with challenge and user identity
+		const token = await signPasskeyChallengeToken(
+			options.challenge,
+			user.id,
+			user.email,
+		);
+
+		return {
+			success: true,
+			options,
+			token,
+		};
+	});
+
+const verifyPasskeyTokenAndGetOptionsSchema = z.object({
+	token: z.string().min(1),
+});
+
+/**
+ * Server function to verify passkey challenge token and generate authentication options
+ * Used in route loaders to prepare passkey authentication
+ */
+export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
+	.inputValidator((data: unknown) => verifyPasskeyTokenAndGetOptionsSchema.parse(data))
+	.handler(async ({ data }) => {
+		try {
+			// Verify token and extract challenge/user info
+			const tokenPayload = await verifyPasskeyChallengeToken(data.token);
+
+			// Fetch user by userId from token
+			const [user] = await db
+				.select()
+				.from(users)
+				.where(eq(users.id, tokenPayload.userId))
+				.limit(1);
+
+			if (!user) {
+				return {
+					success: false,
+					error: 'User not found',
+					email: tokenPayload.email,
+				};
+			}
+
+			// Check if user has a passkey
+			const userPasskey = await db
+				.select()
+				.from(passkeys)
+				.where(eq(passkeys.userId, user.id))
+				.limit(1);
+
+			if (userPasskey.length === 0) {
+				return {
+					success: false,
+					error: 'No passkey found for this user',
+					email: tokenPayload.email,
+				};
+			}
+
+			const passkey = userPasskey[0];
+			const transports = passkey.transports
+				? (JSON.parse(passkey.transports) as string[])
+				: undefined;
+
+			// Generate authentication options
+			const env = getEnvConfig();
+			const opts: GenerateAuthenticationOptionsOpts = {
+				rpID: env.RP_ID,
+				timeout: 60000, // 60 seconds
+				allowCredentials: [
+					{
+						id: passkey.credentialId,
+						transports: transports as any,
+					},
+				],
+				userVerification: 'required',
+			};
+
+			// Generate options (this will create a new challenge, but we'll replace it)
+			const options = await swaGenerateAuthenticationOptions(opts);
+
+			// Replace challenge with the one from token
+			const optionsWithTokenChallenge = {
+				...options,
+				challenge: tokenPayload.challenge,
+			};
+
+			return {
+				success: true,
+				user,
+				options: optionsWithTokenChallenge,
+				token: data.token,
+			};
+		} catch (error) {
+			return {
+				success: false,
+				error:
+					error instanceof Error
+						? error.message
+						: 'Token verification failed',
+			};
+		}
+	});
+
 const verifyAuthenticationResponseSchema = z.object({
 	response: z.unknown(),
-	userId: z.number().int().positive(),
+	token: z.string().min(1),
 });
 
 /**
  * Server function to verify authentication response and update counter
  * Also sets authentication cookie on success
+ * Now uses JWT token to extract challenge instead of database
  */
 export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
 	.inputValidator((data: unknown) => verifyAuthenticationResponseSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
-			const expectedChallenge = await getAndRemoveChallenge(data.userId);
-			if (!expectedChallenge) {
-				return {
-					success: false,
-					error: 'Challenge not found or expired. Please try again.',
-				};
-			}
+			// Verify token and extract challenge
+			const tokenPayload = await verifyPasskeyChallengeToken(data.token);
+			const expectedChallenge = tokenPayload.challenge;
+			const userId = tokenPayload.userId;
 
 			// Fetch user's passkey
 			const userPasskey = await db
 				.select()
 				.from(passkeys)
-				.where(eq(passkeys.userId, data.userId))
+				.where(eq(passkeys.userId, userId))
 				.limit(1);
 
 			if (userPasskey.length === 0) {
@@ -360,7 +527,7 @@ export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
 		}
 
 		// Set authentication cookie on successful verification
-		setAuthCookie(data.userId);
+		setAuthCookie(userId);
 
 		return { success: true };
 		} catch (error) {

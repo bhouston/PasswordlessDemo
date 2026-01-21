@@ -1,13 +1,11 @@
 import { createFileRoute, useRouter, redirect } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
-import { z } from 'zod';
 import { startAuthentication } from '@simplewebauthn/browser';
 import {
-	generateAuthenticationOptions,
+	verifyPasskeyTokenAndGetOptions,
 	verifyAuthenticationResponse,
 } from '@/server/passkey';
-import { getUserByEmail, userHasPasskey } from '@/server/user';
 import {
 	FieldSet,
 	FieldGroup,
@@ -16,50 +14,24 @@ import {
 } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 
-// Zod schema for search params validation
-const loginPasskeySearchSchema = z.object({
-	email: z.string().email('Please provide a valid email address'),
-});
+export const Route = createFileRoute('/login-passkey/$passkeyToken')({
+	loader: async ({ params }) => {
+		const result = await verifyPasskeyTokenAndGetOptions({
+			data: { token: params.passkeyToken },
+		});
 
-export const Route = createFileRoute('/login-passkey')({
-	validateSearch: loginPasskeySearchSchema,
-	loaderDeps: ({ search }) => ({ email: search.email }),
-	loader: async ({ deps }) => {
-		try {
-			const user = await getUserByEmail({ data: { email: deps.email } });
-
-			if (!user) {
+		if (!result.success) {
+			// Redirect to login-verification with email if available, otherwise to login
+			if (result.email) {
 				throw redirect({
 					to: '/login-verification',
-					search: { email: deps.email },
+					search: { email: result.email },
 				});
 			}
-
-			// Check if user has a passkey
-			const hasPasskey = await userHasPasskey({ data: { userId: user.id } });
-
-			if (!hasPasskey) {
-				// Redirect back to verification page if no passkey
-				throw redirect({
-					to: '/login-verification',
-					search: { email: deps.email },
-				});
-			}
-
-			return {
-				success: true,
-				user,
-			};
-		} catch (error) {
-			// Re-throw redirects
-			if (error && typeof error === 'object' && 'to' in error) {
-				throw error;
-			}
-			throw redirect({
-				to: '/login-verification',
-				search: { email: deps.email },
-			});
+			throw redirect({ to: '/login' });
 		}
+
+		return result;
 	},
 	component: LoginPasskeyPage,
 });
@@ -69,11 +41,10 @@ function LoginPasskeyPage() {
 	const result = Route.useLoaderData();
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const generateAuthOptionsFn = useServerFn(generateAuthenticationOptions);
 	const verifyAuthResponseFn = useServerFn(verifyAuthenticationResponse);
 
 	const handlePasskeyLogin = async () => {
-		if (!result.success || !result.user) {
+		if (!result.success || !result.user || !result.options) {
 			return;
 		}
 
@@ -81,25 +52,16 @@ function LoginPasskeyPage() {
 		setError(null);
 
 		try {
-			// Get authentication options from server
-			const options = await generateAuthOptionsFn({
-				data: { userId: result.user.id },
-			});
-
-			if (!options) {
-				throw new Error('No passkey found for this user');
-			}
-
-			// Start authentication on client
+			// Start authentication on client with options from loader
 			const authenticationResponse = await startAuthentication({
-				optionsJSON: options,
+				optionsJSON: result.options,
 			});
 
-			// Verify authentication on server
+			// Verify authentication on server with response + token
 			const verification = await verifyAuthResponseFn({
 				data: {
 					response: authenticationResponse,
-					userId: result.user.id,
+					token: result.token,
 				},
 			});
 
@@ -130,7 +92,6 @@ function LoginPasskeyPage() {
 			setIsLoading(false);
 		}
 	};
-
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
