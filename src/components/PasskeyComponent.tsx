@@ -2,6 +2,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
@@ -24,7 +25,6 @@ export function PasskeyComponent({
 	userDisplayName,
 }: PasskeyComponentProps) {
 	const router = useRouter();
-	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const generateRegistrationOptionsFn = useServerFn(
@@ -33,12 +33,9 @@ export function PasskeyComponent({
 	const verifyRegistrationResponseFn = useServerFn(verifyRegistrationResponse);
 	const deletePasskeyFn = useServerFn(deletePasskey);
 
-	const handleAddPasskey = async () => {
-		setIsLoading(true);
-		setError(null);
-		setSuccessMessage(null);
-
-		try {
+	// Mutation for adding a passkey
+	const addPasskeyMutation = useMutation({
+		mutationFn: async () => {
 			// Generate registration options from server
 			const result = await generateRegistrationOptionsFn({
 				data: {
@@ -66,14 +63,19 @@ export function PasskeyComponent({
 				},
 			});
 
-			if (verification.success) {
-				setSuccessMessage("Passkey registered successfully!");
-				// Invalidate router to refresh data
-				router.invalidate();
-			} else {
-				setError(verification.error || "Failed to register passkey");
+			if (!verification.success) {
+				throw new Error(verification.error || "Failed to register passkey");
 			}
-		} catch (err) {
+
+			return verification;
+		},
+		onSuccess: () => {
+			setSuccessMessage("Passkey registered successfully!");
+			setError(null);
+			// Invalidate router to refresh data
+			router.invalidate();
+		},
+		onError: (err) => {
 			if (err instanceof Error) {
 				// Handle user cancellation gracefully
 				if (
@@ -90,12 +92,38 @@ export function PasskeyComponent({
 			} else {
 				setError("Failed to register passkey. Please try again.");
 			}
-		} finally {
-			setIsLoading(false);
-		}
+			setSuccessMessage(null);
+		},
+	});
+
+	// Mutation for deleting a passkey
+	const deletePasskeyMutation = useMutation({
+		mutationFn: async () => {
+			return await deletePasskeyFn({ data: { userId } });
+		},
+		onSuccess: () => {
+			setSuccessMessage("Passkey deleted successfully!");
+			setError(null);
+			// Invalidate router to refresh data
+			router.invalidate();
+		},
+		onError: (err) => {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Failed to delete passkey. Please try again.",
+			);
+			setSuccessMessage(null);
+		},
+	});
+
+	const handleAddPasskey = () => {
+		setError(null);
+		setSuccessMessage(null);
+		addPasskeyMutation.mutate();
 	};
 
-	const handleDeletePasskey = async () => {
+	const handleDeletePasskey = () => {
 		if (
 			!confirm(
 				"Are you sure you want to delete your passkey? You will need to register a new one to use passkey login.",
@@ -104,25 +132,12 @@ export function PasskeyComponent({
 			return;
 		}
 
-		setIsLoading(true);
 		setError(null);
 		setSuccessMessage(null);
-
-		try {
-			await deletePasskeyFn({ data: { userId } });
-			setSuccessMessage("Passkey deleted successfully!");
-			// Invalidate router to refresh data
-			router.invalidate();
-		} catch (err) {
-			setError(
-				err instanceof Error
-					? err.message
-					: "Failed to delete passkey. Please try again.",
-			);
-		} finally {
-			setIsLoading(false);
-		}
+		deletePasskeyMutation.mutate();
 	};
+
+	const isLoading = addPasskeyMutation.isPending || deletePasskeyMutation.isPending;
 
 	return (
 		<div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
@@ -171,11 +186,11 @@ export function PasskeyComponent({
 								disabled={isLoading}
 								variant="destructive"
 							>
-								{isLoading ? "Deleting..." : "Delete Passkey"}
+								{deletePasskeyMutation.isPending ? "Deleting..." : "Delete Passkey"}
 							</Button>
 						) : (
 							<Button onClick={handleAddPasskey} disabled={isLoading}>
-								{isLoading ? "Registering..." : "Add Passkey"}
+								{addPasskeyMutation.isPending ? "Registering..." : "Add Passkey"}
 							</Button>
 						)}
 					</Field>

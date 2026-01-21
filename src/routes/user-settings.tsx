@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
-import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { getUserWithPasskey, updateUserName } from '@/server/user';
 import { PasskeyComponent } from '@/components/PasskeyComponent';
@@ -30,7 +30,7 @@ export const Route = createFileRoute('/user-settings')({
 			// Server functions are called with an object, even if empty
 			const result = await getUserWithPasskey({});
 			return result;
-		} catch (error) {
+		} catch {
 			// If user is not authenticated, redirect to login
 			throw redirect({
 				to: '/login',
@@ -42,9 +42,18 @@ export const Route = createFileRoute('/user-settings')({
 
 function UserSettingsPage() {
 	const { user, hasPasskey } = Route.useLoaderData();
-	const [submitError, setSubmitError] = useState<string | null>(null);
-	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const updateUserNameFn = useServerFn(updateUserName);
+
+	// Mutation for updating user name
+	const updateNameMutation = useMutation({
+		mutationFn: async (data: UserDetailsFormData) => {
+			const result = await updateUserNameFn({ data });
+			if (!result.success) {
+				throw new Error('Failed to update user name');
+			}
+			return result;
+		},
+	});
 
 	const form = useForm<UserDetailsFormData>({
 		defaultValues: {
@@ -54,21 +63,13 @@ function UserSettingsPage() {
 			onChange: userDetailsSchema,
 		},
 		onSubmit: async ({ value }) => {
-			setSubmitError(null);
-			setSuccessMessage(null);
 			try {
-				const result = await updateUserNameFn({ data: value });
-				if (result.success) {
-					setSuccessMessage('User details saved successfully!');
-					// Update form default values to reflect the saved state
-					form.setFieldValue('name', result.user.name);
-				}
+				const result = await updateNameMutation.mutateAsync(value);
+				// Update form default values to reflect the saved state
+				form.setFieldValue('name', result.user.name);
 			} catch (error) {
-				setSubmitError(
-					error instanceof Error
-						? error.message
-						: 'An error occurred. Please try again.',
-				);
+				// Error is handled by mutation state
+				throw error;
 			}
 		},
 	});
@@ -152,14 +153,18 @@ function UserSettingsPage() {
 											)}
 										</form.Field>
 
-										{submitError && (
-											<FieldError>{submitError}</FieldError>
+										{updateNameMutation.isError && (
+											<FieldError>
+												{updateNameMutation.error instanceof Error
+													? updateNameMutation.error.message
+													: 'An error occurred. Please try again.'}
+											</FieldError>
 										)}
 
-										{successMessage && (
+										{updateNameMutation.isSuccess && (
 											<div className="p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
 												<p className="text-green-400 text-sm">
-													{successMessage}
+													User details saved successfully!
 												</p>
 											</div>
 										)}
@@ -169,10 +174,11 @@ function UserSettingsPage() {
 												type="submit"
 												disabled={
 													form.state.isSubmitting ||
+													updateNameMutation.isPending ||
 													!form.state.isFormValid
 												}
 											>
-												{form.state.isSubmitting
+												{form.state.isSubmitting || updateNameMutation.isPending
 													? 'Saving...'
 													: 'Save'}
 											</Button>

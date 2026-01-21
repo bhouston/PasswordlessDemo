@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { getUserByEmail } from '@/server/user';
 import { generateLoginLink } from '@/server/auth';
@@ -46,21 +47,28 @@ export const Route = createFileRoute('/login-check-email')({
 function LoginCheckEmailPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
-	const [linkSent, setLinkSent] = useState(false);
 	const generateLoginLinkFn = useServerFn(generateLoginLink);
+	const hasAttemptedSend = useRef(false);
 
-	// Auto-send login link on page load
+	// Auto-send login link on page load using useMutation
+	const sendLoginLinkMutation = useMutation({
+		mutationFn: async (userId: number) => {
+			return await generateLoginLinkFn({ data: { userId } });
+		},
+	});
+
+	// Auto-trigger mutation when component mounts and conditions are met
 	useEffect(() => {
-		if (result.success && result.user && !linkSent) {
-			generateLoginLinkFn({ data: { userId: result.user.id } })
-				.then(() => {
-					setLinkSent(true);
-				})
-				.catch((error) => {
-					console.error('Failed to generate login link:', error);
-				});
+		if (
+			result.success &&
+			result.user &&
+			!hasAttemptedSend.current &&
+			!sendLoginLinkMutation.isPending
+		) {
+			hasAttemptedSend.current = true;
+			sendLoginLinkMutation.mutate(result.user.id);
 		}
-	}, [result.success, result.user, linkSent, generateLoginLinkFn]);
+	}, [result.success, result.user, sendLoginLinkMutation]);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -103,7 +111,7 @@ function LoginCheckEmailPage() {
 									)}
 								</div>
 
-								{linkSent && (
+								{sendLoginLinkMutation.isSuccess && (
 									<div className="mb-6">
 										<div className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
 											<svg
