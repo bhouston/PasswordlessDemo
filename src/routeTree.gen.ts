@@ -9,16 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupCheckEmailRouteImport } from './routes/signup-check-email'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DemoDbExampleRouteImport } from './routes/demo/db-example'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
+import { Route as AuthRegisterRegistrationTokenRouteImport } from './routes/auth/register.$registrationToken'
 import { Route as DemoStartSsrIndexRouteImport } from './routes/demo/start.ssr.index'
 import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr.spa-mode'
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
 
+const SignupCheckEmailRoute = SignupCheckEmailRouteImport.update({
+  id: '/signup-check-email',
+  path: '/signup-check-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -44,6 +57,12 @@ const DemoApiNamesRoute = DemoApiNamesRouteImport.update({
   path: '/demo/api/names',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRegisterRegistrationTokenRoute =
+  AuthRegisterRegistrationTokenRouteImport.update({
+    id: '/auth/register/$registrationToken',
+    path: '/auth/register/$registrationToken',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DemoStartSsrIndexRoute = DemoStartSsrIndexRouteImport.update({
   id: '/demo/start/ssr/',
   path: '/demo/start/ssr/',
@@ -67,7 +86,10 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/signup': typeof SignupRoute
+  '/signup-check-email': typeof SignupCheckEmailRoute
   '/demo/db-example': typeof DemoDbExampleRoute
+  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -78,7 +100,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/signup': typeof SignupRoute
+  '/signup-check-email': typeof SignupCheckEmailRoute
   '/demo/db-example': typeof DemoDbExampleRoute
+  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -90,7 +115,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/signup': typeof SignupRoute
+  '/signup-check-email': typeof SignupCheckEmailRoute
   '/demo/db-example': typeof DemoDbExampleRoute
+  '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -103,7 +131,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/signup'
+    | '/signup-check-email'
     | '/demo/db-example'
+    | '/auth/register/$registrationToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -114,7 +145,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/signup'
+    | '/signup-check-email'
     | '/demo/db-example'
+    | '/auth/register/$registrationToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -125,7 +159,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/signup'
+    | '/signup-check-email'
     | '/demo/db-example'
+    | '/auth/register/$registrationToken'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -137,7 +174,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SignupRoute: typeof SignupRoute
+  SignupCheckEmailRoute: typeof SignupCheckEmailRoute
   DemoDbExampleRoute: typeof DemoDbExampleRoute
+  AuthRegisterRegistrationTokenRoute: typeof AuthRegisterRegistrationTokenRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
   DemoStartServerFuncsRoute: typeof DemoStartServerFuncsRoute
@@ -149,6 +189,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup-check-email': {
+      id: '/signup-check-email'
+      path: '/signup-check-email'
+      fullPath: '/signup-check-email'
+      preLoaderRoute: typeof SignupCheckEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -184,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoApiNamesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/register/$registrationToken': {
+      id: '/auth/register/$registrationToken'
+      path: '/auth/register/$registrationToken'
+      fullPath: '/auth/register/$registrationToken'
+      preLoaderRoute: typeof AuthRegisterRegistrationTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/start/ssr/': {
       id: '/demo/start/ssr/'
       path: '/demo/start/ssr'
@@ -217,7 +278,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SignupRoute: SignupRoute,
+  SignupCheckEmailRoute: SignupCheckEmailRoute,
   DemoDbExampleRoute: DemoDbExampleRoute,
+  AuthRegisterRegistrationTokenRoute: AuthRegisterRegistrationTokenRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,
   DemoStartServerFuncsRoute: DemoStartServerFuncsRoute,
