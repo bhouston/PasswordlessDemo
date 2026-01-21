@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UserSettingsRouteImport } from './routes/user-settings'
 import { Route as SignupCheckEmailRouteImport } from './routes/signup-check-email'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginVerificationRouteImport } from './routes/login-verification'
@@ -25,6 +26,11 @@ import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
 
+const UserSettingsRoute = UserSettingsRouteImport.update({
+  id: '/user-settings',
+  path: '/user-settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupCheckEmailRoute = SignupCheckEmailRouteImport.update({
   id: '/signup-check-email',
   path: '/signup-check-email',
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/login-verification': typeof LoginVerificationRoute
   '/signup': typeof SignupRoute
   '/signup-check-email': typeof SignupCheckEmailRoute
+  '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
   '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/login-verification': typeof LoginVerificationRoute
   '/signup': typeof SignupRoute
   '/signup-check-email': typeof SignupCheckEmailRoute
+  '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
   '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
@@ -144,6 +152,7 @@ export interface FileRoutesById {
   '/login-verification': typeof LoginVerificationRoute
   '/signup': typeof SignupRoute
   '/signup-check-email': typeof SignupCheckEmailRoute
+  '/user-settings': typeof UserSettingsRoute
   '/demo/db-example': typeof DemoDbExampleRoute
   '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
   '/auth/register/$registrationToken': typeof AuthRegisterRegistrationTokenRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
+    | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
     | '/auth/register/$registrationToken'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
+    | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
     | '/auth/register/$registrationToken'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/login-verification'
     | '/signup'
     | '/signup-check-email'
+    | '/user-settings'
     | '/demo/db-example'
     | '/login-via-link/$loginLinkToken'
     | '/auth/register/$registrationToken'
@@ -215,6 +227,7 @@ export interface RootRouteChildren {
   LoginVerificationRoute: typeof LoginVerificationRoute
   SignupRoute: typeof SignupRoute
   SignupCheckEmailRoute: typeof SignupCheckEmailRoute
+  UserSettingsRoute: typeof UserSettingsRoute
   DemoDbExampleRoute: typeof DemoDbExampleRoute
   LoginViaLinkLoginLinkTokenRoute: typeof LoginViaLinkLoginLinkTokenRoute
   AuthRegisterRegistrationTokenRoute: typeof AuthRegisterRegistrationTokenRoute
@@ -229,6 +242,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/user-settings': {
+      id: '/user-settings'
+      path: '/user-settings'
+      fullPath: '/user-settings'
+      preLoaderRoute: typeof UserSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup-check-email': {
       id: '/signup-check-email'
       path: '/signup-check-email'
@@ -343,6 +363,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginVerificationRoute: LoginVerificationRoute,
   SignupRoute: SignupRoute,
   SignupCheckEmailRoute: SignupCheckEmailRoute,
+  UserSettingsRoute: UserSettingsRoute,
   DemoDbExampleRoute: DemoDbExampleRoute,
   LoginViaLinkLoginLinkTokenRoute: LoginViaLinkLoginLinkTokenRoute,
   AuthRegisterRegistrationTokenRoute: AuthRegisterRegistrationTokenRoute,
