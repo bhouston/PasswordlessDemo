@@ -1,10 +1,10 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
-import { useServerFn } from '@tanstack/react-start';
-import { useForm } from '@tanstack/react-form';
-import { useMutation } from '@tanstack/react-query';
-import { z } from 'zod';
-import { getUserWithPasskey, updateUserName } from '@/server/user';
-import { PasskeyComponent } from '@/components/PasskeyComponent';
+import { useForm } from "@tanstack/react-form";
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { PasskeyComponent } from "@/components/PasskeyComponent";
+import { Button } from "@/components/ui/button";
 import {
 	Field,
 	FieldDescription,
@@ -12,18 +12,18 @@ import {
 	FieldGroup,
 	FieldLabel,
 	FieldSet,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { getUserWithPasskey, updateUserName } from "@/server/user";
 
 // Zod schema for form validation
 const userDetailsSchema = z.object({
-	name: z.string().min(1, 'Name is required'),
+	name: z.string().min(3, "Name is required").max(100, "Name is too long"),
 });
 
 type UserDetailsFormData = z.infer<typeof userDetailsSchema>;
 
-export const Route = createFileRoute('/user-settings')({
+export const Route = createFileRoute("/user-settings")({
 	loader: async () => {
 		try {
 			// Call server function directly - it can be invoked from loaders
@@ -33,7 +33,7 @@ export const Route = createFileRoute('/user-settings')({
 		} catch {
 			// If user is not authenticated, redirect to login
 			throw redirect({
-				to: '/login',
+				to: "/login",
 			});
 		}
 	},
@@ -49,13 +49,13 @@ function UserSettingsPage() {
 		mutationFn: async (data: UserDetailsFormData) => {
 			const result = await updateUserNameFn({ data });
 			if (!result.success) {
-				throw new Error('Failed to update user name');
+				throw new Error("Failed to update user name");
 			}
 			return result;
 		},
 	});
 
-	const form = useForm<UserDetailsFormData>({
+	const form = useForm({
 		defaultValues: {
 			name: user.name,
 		},
@@ -66,10 +66,14 @@ function UserSettingsPage() {
 			try {
 				const result = await updateNameMutation.mutateAsync(value);
 				// Update form default values to reflect the saved state
-				form.setFieldValue('name', result.user.name);
+				form.setFieldValue("name", result.user.name);
 			} catch (error) {
-				// Error is handled by mutation state
-				throw error;
+				form.setFieldError(
+					"name",
+					error instanceof Error
+						? error.message
+						: "An error occurred. Please try again.",
+				);
 			}
 		},
 	});
@@ -78,9 +82,7 @@ function UserSettingsPage() {
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
 			<div className="max-w-4xl mx-auto py-8">
 				<div className="mb-8">
-					<h1 className="text-4xl font-bold text-white mb-2">
-						User Settings
-					</h1>
+					<h1 className="text-4xl font-bold text-white mb-2">User Settings</h1>
 					<p className="text-gray-400">
 						Manage your account settings and preferences
 					</p>
@@ -111,42 +113,23 @@ function UserSettingsPage() {
 										<form.Field name="name">
 											{(field) => (
 												<Field
-													data-invalid={
-														field.state.meta.errors.length >
-														0
-													}
+													data-invalid={field.state.meta.errors.length > 0}
 												>
-													<FieldLabel htmlFor={field.name}>
-														Name
-													</FieldLabel>
+													<FieldLabel htmlFor={field.name}>Name</FieldLabel>
 													<Input
 														id={field.name}
 														name={field.name}
 														type="text"
 														value={field.state.value}
 														onBlur={field.handleBlur}
-														onChange={(e) =>
-															field.handleChange(
-																e.target.value,
-															)
-														}
-														aria-invalid={
-															field.state.meta
-																.errors.length >
-															0
-														}
+														onChange={(e) => field.handleChange(e.target.value)}
+														aria-invalid={field.state.meta.errors.length > 0}
 														placeholder="Your name"
 													/>
-													<FieldDescription>
-														Your display name
-													</FieldDescription>
-													{field.state.meta.errors.length >
-														0 && (
+													<FieldDescription>Your display name</FieldDescription>
+													{field.state.meta.errors.length > 0 && (
 														<FieldError>
-															{
-																field.state.meta
-																	.errors[0]
-															}
+															{field.state.meta.errors[0]}
 														</FieldError>
 													)}
 												</Field>
@@ -157,7 +140,7 @@ function UserSettingsPage() {
 											<FieldError>
 												{updateNameMutation.error instanceof Error
 													? updateNameMutation.error.message
-													: 'An error occurred. Please try again.'}
+													: "An error occurred. Please try again."}
 											</FieldError>
 										)}
 
@@ -179,8 +162,8 @@ function UserSettingsPage() {
 												}
 											>
 												{form.state.isSubmitting || updateNameMutation.isPending
-													? 'Saving...'
-													: 'Save'}
+													? "Saving..."
+													: "Save"}
 											</Button>
 										</Field>
 									</FieldGroup>

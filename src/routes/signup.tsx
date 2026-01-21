@@ -1,7 +1,8 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { useServerFn } from '@tanstack/react-start';
-import { useForm } from '@tanstack/react-form';
-import { z } from 'zod';
+import { useForm } from "@tanstack/react-form";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
 import {
 	Field,
 	FieldDescription,
@@ -9,20 +10,17 @@ import {
 	FieldGroup,
 	FieldLabel,
 	FieldSet,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { signup } from '@/server/auth';
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { signup } from "@/server/auth";
 
 // Zod schema for form validation
 const signupSchema = z.object({
-	name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
-	email: z.string().email('Please enter a valid email address'),
+	name: z.string().min(3, "Name is required").max(100, "Name is too long"),
+	email: z.email("Please enter a valid email address"),
 });
 
-type SignupFormData = z.infer<typeof signupSchema>;
-
-export const Route = createFileRoute('/signup')({
+export const Route = createFileRoute("/signup")({
 	component: SignupPage,
 });
 
@@ -30,23 +28,18 @@ function SignupPage() {
 	const router = useRouter();
 	const signupFn = useServerFn(signup);
 
-	const form = useForm<SignupFormData>({
+	const form = useForm({
 		defaultValues: {
-			name: '',
-			email: '',
+			name: "",
+			email: "",
 		},
 		validators: {
 			onChange: signupSchema,
 		},
 		onSubmit: async ({ value }) => {
-			try {
-				await signupFn({ data: value });
-				// Navigate to check-email page on success
-				router.navigate({ to: '/signup-check-email' });
-			} catch (error) {
-				// Error will be handled by form state
-				throw error;
-			}
+			await signupFn({ data: value });
+			// Navigate to check-email page on success
+			await router.navigate({ to: "/signup-check-email" });
 		},
 	});
 
@@ -74,37 +67,19 @@ function SignupPage() {
 							<FieldGroup>
 								<form.Field name="name">
 									{(field) => (
-										<Field
-											data-invalid={
-												field.state.meta.errors.length > 0
-											}
-										>
-											<FieldLabel htmlFor={field.name}>
-												Name
-											</FieldLabel>
+										<Field data-invalid={field.state.meta.errors.length > 0}>
+											<FieldLabel htmlFor={field.name}>Name</FieldLabel>
 											<Input
 												id={field.name}
 												name={field.name}
 												value={field.state.value}
 												onBlur={field.handleBlur}
-												onChange={(e) =>
-													field.handleChange(
-														e.target.value,
-													)
-												}
-												aria-invalid={
-													field.state.meta.errors.length >
-													0
-												}
+												onChange={(e) => field.handleChange(e.target.value)}
+												aria-invalid={field.state.meta.errors.length > 0}
 												placeholder="John Doe"
 											/>
-											{field.state.meta.errors.length >
-												0 && (
-												<FieldError>
-													{
-														field.state.meta.errors[0]
-													}
-												</FieldError>
+											{field.state.meta.errors.length > 0 && (
+												<FieldError>{field.state.meta.errors[0].message}</FieldError>
 											)}
 										</Field>
 									)}
@@ -112,53 +87,33 @@ function SignupPage() {
 
 								<form.Field name="email">
 									{(field) => (
-										<Field
-											data-invalid={
-												field.state.meta.errors.length > 0
-											}
-										>
-											<FieldLabel htmlFor={field.name}>
-												Email
-											</FieldLabel>
+										<Field data-invalid={field.state.meta.errors.length > 0}>
+											<FieldLabel htmlFor={field.name}>Email</FieldLabel>
 											<Input
 												id={field.name}
 												name={field.name}
 												type="email"
 												value={field.state.value}
 												onBlur={field.handleBlur}
-												onChange={(e) =>
-													field.handleChange(
-														e.target.value,
-													)
-												}
-												aria-invalid={
-													field.state.meta.errors.length >
-													0
-												}
+												onChange={(e) => field.handleChange(e.target.value)}
+												aria-invalid={field.state.meta.errors.length > 0}
 												placeholder="john@example.com"
 											/>
 											<FieldDescription>
-												We'll send you a verification link
-												to this email address
+												We'll send you a verification link to this email address
 											</FieldDescription>
-											{field.state.meta.errors.length >
-												0 && (
-												<FieldError>
-													{
-														field.state.meta.errors[0]
-													}
-												</FieldError>
+											{field.state.meta.errors.length > 0 && (
+												<FieldError>{field.state.meta.errors[0]}</FieldError>
 											)}
 										</Field>
 									)}
 								</form.Field>
 
 								{form.state.submissionAttempts > 0 &&
-									form.state.submissionStatus ===
-										'error' && (
+									form.state.submissionStatus === "error" && (
 										<FieldError>
 											{form.state.submissionError?.message ||
-												'An error occurred. Please try again.'}
+												"An error occurred. Please try again."}
 										</FieldError>
 									)}
 
@@ -168,9 +123,7 @@ function SignupPage() {
 										disabled={form.state.isSubmitting}
 										className="w-full"
 									>
-										{form.state.isSubmitting
-											? 'Signing up...'
-											: 'Sign Up'}
+										{form.state.isSubmitting ? "Signing up..." : "Sign Up"}
 									</Button>
 								</Field>
 							</FieldGroup>

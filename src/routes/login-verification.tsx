@@ -1,23 +1,18 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
-import { z } from 'zod';
-import { getUserByEmail, userHasPasskey } from '@/server/user';
-import { initiatePasskeyLogin } from '@/server/passkey';
-import {
-	FieldSet,
-	FieldGroup,
-	FieldError,
-	Field,
-} from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
+import { initiatePasskeyLogin } from "@/server/passkey";
+import { getUserByEmail, userHasPasskey } from "@/server/user";
 
 // Zod schema for search params validation
 const loginVerificationSearchSchema = z.object({
-	email: z.string().email('Please provide a valid email address'),
+	email: z.string().email("Please provide a valid email address"),
 });
 
-export const Route = createFileRoute('/login-verification')({
+export const Route = createFileRoute("/login-verification")({
 	validateSearch: loginVerificationSearchSchema,
 	loaderDeps: ({ search }) => ({ email: search.email }),
 	loader: async ({ deps }) => {
@@ -27,7 +22,7 @@ export const Route = createFileRoute('/login-verification')({
 			if (!user) {
 				return {
 					success: false,
-					error: 'No account found with this email address',
+					error: "No account found with this email address",
 				};
 			}
 
@@ -45,7 +40,7 @@ export const Route = createFileRoute('/login-verification')({
 				error:
 					error instanceof Error
 						? error.message
-						: 'An error occurred while checking your account',
+						: "An error occurred while checking your account",
 			};
 		}
 	},
@@ -55,40 +50,36 @@ export const Route = createFileRoute('/login-verification')({
 function LoginVerificationPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const initiatePasskeyLoginFn = useServerFn(initiatePasskeyLogin);
 
-	const handlePasskeyLogin = async () => {
+	// Mutation for initiating passkey login
+	const passkeyLoginMutation = useMutation({
+		mutationFn: async (email: string) => {
+			const response = await initiatePasskeyLoginFn({
+				data: { email },
+			});
+
+			if (!response.success) {
+				throw new Error(response.error || "Failed to initiate passkey login");
+			}
+
+			return response;
+		},
+		onSuccess: async (response) => {
+			// Redirect to token-based route
+			await router.navigate({
+				to: "/login-passkey/$passkeyToken",
+				params: { passkeyToken: response.token },
+			});
+		},
+	});
+
+	const handlePasskeyLogin = () => {
 		if (!result.success || !result.user) {
 			return;
 		}
 
-		setIsLoading(true);
-		setError(null);
-
-		try {
-			const response = await initiatePasskeyLoginFn({
-				data: { email: result.user.email },
-			});
-
-			if (!response.success) {
-				throw new Error(response.error || 'Failed to initiate passkey login');
-			}
-
-			// Redirect to token-based route
-			router.navigate({
-				to: '/login-passkey/$passkeyToken',
-				params: { passkeyToken: response.token },
-			});
-		} catch (err) {
-			setError(
-				err instanceof Error
-					? err.message
-					: 'Failed to initiate passkey login. Please try again.',
-			);
-			setIsLoading(false);
-		}
+		passkeyLoginMutation.mutate(result.user.email);
 	};
 
 	return (
@@ -103,21 +94,23 @@ function LoginVerificationPage() {
 										Choose Verification Method
 									</h1>
 									<p className="text-gray-400 mb-4">
-										Select how you'd like to verify your
-										account
+										Select how you'd like to verify your account
 									</p>
 									{result.user && (
 										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
 											<p className="text-sm text-gray-300">
-												<strong>Email:</strong>{' '}
-												{result.user.email}
+												<strong>Email:</strong> {result.user.email}
 											</p>
 										</div>
 									)}
 								</div>
 
-								{error && (
-									<FieldError className="mb-4">{error}</FieldError>
+								{passkeyLoginMutation.isError && (
+									<FieldError className="mb-4">
+										{passkeyLoginMutation.error instanceof Error
+											? passkeyLoginMutation.error.message
+											: "Failed to initiate passkey login. Please try again."}
+									</FieldError>
 								)}
 
 								<div className="space-y-4">
@@ -125,12 +118,12 @@ function LoginVerificationPage() {
 										<Field>
 											<Button
 												onClick={handlePasskeyLogin}
-												disabled={isLoading}
+												disabled={passkeyLoginMutation.isPending}
 												className="w-full"
 											>
-												{isLoading
-													? 'Preparing passkey login...'
-													: 'Login with Passkey'}
+												{passkeyLoginMutation.isPending
+													? "Preparing passkey login..."
+													: "Login with Passkey"}
 											</Button>
 										</Field>
 									)}
@@ -143,14 +136,14 @@ function LoginVerificationPage() {
 									)}
 									<Field>
 										<Button
-											onClick={() =>
-												router.navigate({
-													to: '/login-check-email',
-													search: { email: result.user?.email || '' },
+											onClick={async () =>
+												await router.navigate({
+													to: "/login-check-email",
+													search: { email: result.user?.email || "" },
 												})
 											}
 											className="w-full"
-											variant={result.hasPasskey ? 'outline' : 'default'}
+											variant={result.hasPasskey ? "outline" : "default"}
 										>
 											Login Via Email Link
 										</Button>
@@ -180,12 +173,12 @@ function LoginVerificationPage() {
 									</h1>
 									<FieldError className="mt-4">
 										{result.error ||
-											'No account found with this email address. Please check your email or sign up for a new account.'}
+											"No account found with this email address. Please check your email or sign up for a new account."}
 									</FieldError>
 									<Field className="mt-6">
 										<Button
-											onClick={() =>
-												router.navigate({ to: '/login' })
+											onClick={async () =>
+												await router.navigate({ to: "/login" })
 											}
 											className="w-full"
 										>

@@ -54,7 +54,7 @@ export class RateLimitError extends Error {
  */
 function getClientIP(): string {
 	try {
-		const ip = getRequestIP({ ipHeader: "x-forwarded-for" });
+		const ip = getRequestIP({ xForwardedFor: true });
 		return ip || "unknown";
 	} catch {
 		return "unknown";

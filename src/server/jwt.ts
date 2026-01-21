@@ -1,5 +1,5 @@
-import { SignJWT, jwtVerify } from 'jose';
-import { getEnvConfig } from './env';
+import { jwtVerify, SignJWT } from "jose";
+import { getEnvConfig } from "./env";
 
 // Token expiration times (in seconds)
 const SIGNUP_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
@@ -51,7 +51,7 @@ export async function signSignupToken(
 	const now = Math.floor(Date.now() / 1000);
 
 	const token = await new SignJWT({ name, email })
-		.setProtectedHeader({ alg: 'HS256' })
+		.setProtectedHeader({ alg: "HS256" })
 		.setIssuedAt(now)
 		.setExpirationTime(now + SIGNUP_TOKEN_EXPIRATION)
 		.sign(secret);
@@ -72,15 +72,12 @@ export async function verifySignupToken(
 
 	try {
 		const { payload } = await jwtVerify(token, secret, {
-			algorithms: ['HS256'],
+			algorithms: ["HS256"],
 		});
 
 		// Validate payload structure
-		if (
-			typeof payload.name !== 'string' ||
-			typeof payload.email !== 'string'
-		) {
-			throw new Error('Invalid token payload structure');
+		if (typeof payload.name !== "string" || typeof payload.email !== "string") {
+			throw new Error("Invalid token payload structure");
 		}
 
 		return {
@@ -93,7 +90,7 @@ export async function verifySignupToken(
 		if (error instanceof Error) {
 			throw new Error(`Token verification failed: ${error.message}`);
 		}
-		throw new Error('Token verification failed: Unknown error');
+		throw new Error("Token verification failed: Unknown error");
 	}
 }
 
@@ -108,7 +105,7 @@ export async function signLoginLinkToken(userId: number): Promise<string> {
 	const now = Math.floor(Date.now() / 1000);
 
 	const token = await new SignJWT({ userId })
-		.setProtectedHeader({ alg: 'HS256' })
+		.setProtectedHeader({ alg: "HS256" })
 		.setIssuedAt(now)
 		.setExpirationTime(now + LOGIN_LINK_TOKEN_EXPIRATION)
 		.sign(secret);
@@ -129,12 +126,12 @@ export async function verifyLoginLinkToken(
 
 	try {
 		const { payload } = await jwtVerify(token, secret, {
-			algorithms: ['HS256'],
+			algorithms: ["HS256"],
 		});
 
 		// Validate payload structure
-		if (typeof payload.userId !== 'number') {
-			throw new Error('Invalid token payload structure');
+		if (typeof payload.userId !== "number") {
+			throw new Error("Invalid token payload structure");
 		}
 
 		return {
@@ -146,7 +143,7 @@ export async function verifyLoginLinkToken(
 		if (error instanceof Error) {
 			throw new Error(`Token verification failed: ${error.message}`);
 		}
-		throw new Error('Token verification failed: Unknown error');
+		throw new Error("Token verification failed: Unknown error");
 	}
 }
 
@@ -167,7 +164,7 @@ export async function signPasskeyChallengeToken(
 	const now = Math.floor(Date.now() / 1000);
 
 	const token = await new SignJWT({ challenge, userId, email })
-		.setProtectedHeader({ alg: 'HS256' })
+		.setProtectedHeader({ alg: "HS256" })
 		.setIssuedAt(now)
 		.setExpirationTime(now + PASSKEY_CHALLENGE_TOKEN_EXPIRATION)
 		.sign(secret);
@@ -188,16 +185,16 @@ export async function verifyPasskeyChallengeToken(
 
 	try {
 		const { payload } = await jwtVerify(token, secret, {
-			algorithms: ['HS256'],
+			algorithms: ["HS256"],
 		});
 
 		// Validate payload structure
 		if (
-			typeof payload.challenge !== 'string' ||
-			typeof payload.userId !== 'number' ||
-			typeof payload.email !== 'string'
+			typeof payload.challenge !== "string" ||
+			typeof payload.userId !== "number" ||
+			typeof payload.email !== "string"
 		) {
-			throw new Error('Invalid token payload structure');
+			throw new Error("Invalid token payload structure");
 		}
 
 		return {
@@ -211,6 +208,6 @@ export async function verifyPasskeyChallengeToken(
 		if (error instanceof Error) {
 			throw new Error(`Token verification failed: ${error.message}`);
 		}
-		throw new Error('Token verification failed: Unknown error');
+		throw new Error("Token verification failed: Unknown error");
 	}
 }

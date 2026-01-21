@@ -1,12 +1,12 @@
-import { createServerFn } from '@tanstack/react-start';
-import { z } from 'zod';
-import { db } from '@/db';
-import { users, passkeys } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { requireUser } from './middleware';
+import { createServerFn } from "@tanstack/react-start";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { passkeys, users } from "@/db/schema";
+import { requireUser } from "./middleware";
 
 const updateUserNameSchema = z.object({
-	name: z.string().min(1, 'Name is required'),
+	name: z.string().min(1, "Name is required"),
 });
 
 const getUserByIdSchema = z.object({
@@ -20,7 +20,7 @@ const getUserByEmailSchema = z.object({
 /**
  * Server function to get user by ID
  */
-export const getUserById = createServerFn({ method: 'GET' })
+export const getUserById = createServerFn({ method: "GET" })
 	.inputValidator((data: unknown) => getUserByIdSchema.parse(data))
 	.handler(async ({ data }) => {
 		const [user] = await db
@@ -35,7 +35,7 @@ export const getUserById = createServerFn({ method: 'GET' })
 /**
  * Server function to get user by email
  */
-export const getUserByEmail = createServerFn({ method: 'GET' })
+export const getUserByEmail = createServerFn({ method: "GET" })
 	.inputValidator((data: unknown) => getUserByEmailSchema.parse(data))
 	.handler(async ({ data }) => {
 		const [user] = await db
@@ -51,7 +51,7 @@ export const getUserByEmail = createServerFn({ method: 'GET' })
  * Server function to update user name
  * Uses requireUser middleware to ensure authentication
  */
-export const updateUserName = createServerFn({ method: 'POST' })
+export const updateUserName = createServerFn({ method: "POST" })
 	.middleware([requireUser])
 	.inputValidator((data: unknown) => updateUserNameSchema.parse(data))
 	.handler(async ({ data, context }) => {
@@ -64,7 +64,7 @@ export const updateUserName = createServerFn({ method: 'POST' })
 			.returning();
 
 		if (!updatedUser) {
-			throw new Error('User not found');
+			throw new Error("User not found");
 		}
 
 		return {
@@ -78,7 +78,7 @@ export const updateUserName = createServerFn({ method: 'POST' })
  * Uses requireUser middleware to ensure authentication
  * Note: This function doesn't require input data as it uses middleware to get the user
  */
-export const getUserWithPasskey = createServerFn({ method: 'GET' })
+export const getUserWithPasskey = createServerFn({ method: "GET" })
 	.middleware([requireUser])
 	.handler(async ({ context }) => {
 		const user = context.user;
@@ -103,7 +103,7 @@ const userHasPasskeySchema = z.object({
 /**
  * Server function to check if user has a passkey by user ID
  */
-export const userHasPasskey = createServerFn({ method: 'GET' })
+export const userHasPasskey = createServerFn({ method: "GET" })
 	.inputValidator((data: unknown) => userHasPasskeySchema.parse(data))
 	.handler(async ({ data }) => {
 		const userPasskey = await db

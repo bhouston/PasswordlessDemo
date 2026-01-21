@@ -1,8 +1,8 @@
 import { startRegistration } from "@simplewebauthn/browser";
+import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
@@ -137,7 +137,8 @@ export function PasskeyComponent({
 		deletePasskeyMutation.mutate();
 	};
 
-	const isLoading = addPasskeyMutation.isPending || deletePasskeyMutation.isPending;
+	const isLoading =
+		addPasskeyMutation.isPending || deletePasskeyMutation.isPending;
 
 	return (
 		<div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
@@ -186,11 +187,15 @@ export function PasskeyComponent({
 								disabled={isLoading}
 								variant="destructive"
 							>
-								{deletePasskeyMutation.isPending ? "Deleting..." : "Delete Passkey"}
+								{deletePasskeyMutation.isPending
+									? "Deleting..."
+									: "Delete Passkey"}
 							</Button>
 						) : (
 							<Button onClick={handleAddPasskey} disabled={isLoading}>
-								{addPasskeyMutation.isPending ? "Registering..." : "Add Passkey"}
+								{addPasskeyMutation.isPending
+									? "Registering..."
+									: "Add Passkey"}
 							</Button>
 						)}
 					</Field>

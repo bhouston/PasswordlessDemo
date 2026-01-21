@@ -1,20 +1,15 @@
-import { createFileRoute, useRouter, redirect } from '@tanstack/react-router';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
-import { startAuthentication } from '@simplewebauthn/browser';
+import { startAuthentication } from "@simplewebauthn/browser";
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
 	getPasskeyAssertionOptions,
 	verifyAuthenticationResponse,
-} from '@/server/passkey';
-import {
-	FieldSet,
-	FieldGroup,
-	FieldError,
-	Field,
-} from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
+} from "@/server/passkey";
 
-export const Route = createFileRoute('/login-passkey/$passkeyToken')({
+export const Route = createFileRoute("/login-passkey/$passkeyToken")({
 	loader: async ({ params }) => {
 		const result = await getPasskeyAssertionOptions({
 			data: { token: params.passkeyToken },
@@ -24,11 +19,11 @@ export const Route = createFileRoute('/login-passkey/$passkeyToken')({
 			// Redirect to login-verification with email if available, otherwise to login
 			if (result.email) {
 				throw redirect({
-					to: '/login-verification',
+					to: "/login-verification",
 					search: { email: result.email },
 				});
 			}
-			throw redirect({ to: '/login' });
+			throw redirect({ to: "/login" });
 		}
 
 		return result;
@@ -39,58 +34,70 @@ export const Route = createFileRoute('/login-passkey/$passkeyToken')({
 function LoginPasskeyPage() {
 	const router = useRouter();
 	const result = Route.useLoaderData();
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const verifyAuthResponseFn = useServerFn(verifyAuthenticationResponse);
 
-	const handlePasskeyLogin = async () => {
-		if (!result.success || !result.user || !result.options) {
-			return;
-		}
-
-		setIsLoading(true);
-		setError(null);
-
-		try {
+	// Mutation for passkey authentication
+	const passkeyAuthMutation = useMutation({
+		mutationFn: async ({
+			options,
+			token,
+		}: {
+			options: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+			token: string;
+		}) => {
 			// Start authentication on client with options from loader
 			const authenticationResponse = await startAuthentication({
-				optionsJSON: result.options,
+				optionsJSON: options,
 			});
 
 			// Verify authentication on server with response + token
 			const verification = await verifyAuthResponseFn({
 				data: {
 					response: authenticationResponse,
-					token: result.token,
+					token,
 				},
 			});
 
 			if (!verification.success) {
-				throw new Error(verification.error || 'Authentication failed');
+				throw new Error(verification.error || "Authentication failed");
 			}
 
+			return verification;
+		},
+		onSuccess: async () => {
 			// Redirect to user settings on success
-			router.navigate({ to: '/user-settings' });
-		} catch (err) {
-			if (err instanceof Error) {
-				// Handle user cancellation gracefully
-				if (
-					err.message.includes('cancelled') ||
-					err.message.includes('abort') ||
-					err.message.includes('NotAllowedError')
-				) {
-					setError('Authentication cancelled');
-				} else if (err.message.includes('NotSupportedError')) {
-					setError('Passkeys are not supported on this device or browser');
-				} else {
-					setError(err.message || 'Failed to authenticate with passkey');
-				}
-			} else {
-				setError('Failed to authenticate with passkey. Please try again.');
-			}
-		} finally {
-			setIsLoading(false);
+			await router.navigate({ to: "/user-settings" });
+		},
+	});
+
+	const handlePasskeyLogin = () => {
+		if (!result.success || !result.user || !result.options) {
+			return;
 		}
+
+		passkeyAuthMutation.mutate({
+			options: result.options,
+			token: result.token,
+		});
+	};
+
+	// Format error message for display
+	const getErrorMessage = (error: unknown): string => {
+		if (error instanceof Error) {
+			// Handle user cancellation gracefully
+			if (
+				error.message.includes("cancelled") ||
+				error.message.includes("abort") ||
+				error.message.includes("NotAllowedError")
+			) {
+				return "Authentication cancelled";
+			}
+			if (error.message.includes("NotSupportedError")) {
+				return "Passkeys are not supported on this device or browser";
+			}
+			return error.message || "Failed to authenticate with passkey";
+		}
+		return "Failed to authenticate with passkey. Please try again.";
 	};
 
 	return (
@@ -125,27 +132,28 @@ function LoginPasskeyPage() {
 									{result.user && (
 										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
 											<p className="text-sm text-gray-300">
-												<strong>Email:</strong>{' '}
-												{result.user.email}
+												<strong>Email:</strong> {result.user.email}
 											</p>
 										</div>
 									)}
 								</div>
 
-								{error && (
-									<FieldError className="mb-4">{error}</FieldError>
+								{passkeyAuthMutation.isError && (
+									<FieldError className="mb-4">
+										{getErrorMessage(passkeyAuthMutation.error)}
+									</FieldError>
 								)}
 
 								<div className="space-y-4">
 									<Field>
 										<Button
 											onClick={handlePasskeyLogin}
-											disabled={isLoading}
+											disabled={passkeyAuthMutation.isPending}
 											className="w-full"
 										>
-											{isLoading
-												? 'Authenticating...'
-												: 'Authenticate with Passkey'}
+											{passkeyAuthMutation.isPending
+												? "Authenticating..."
+												: "Authenticate with Passkey"}
 										</Button>
 									</Field>
 
@@ -157,10 +165,10 @@ function LoginPasskeyPage() {
 
 									<Field>
 										<Button
-											onClick={() =>
-												router.navigate({
-													to: '/login-verification',
-													search: { email: result.user?.email || '' },
+											onClick={async () =>
+												await router.navigate({
+													to: "/login-verification",
+													search: { email: result.user?.email || "" },
 												})
 											}
 											className="w-full"
@@ -178,8 +186,8 @@ function LoginPasskeyPage() {
 								</FieldError>
 								<Field className="mt-6">
 									<Button
-										onClick={() =>
-											router.navigate({ to: '/login' })
+										onClick={async () =>
+											await router.navigate({ to: "/login" })
 										}
 										className="w-full"
 									>

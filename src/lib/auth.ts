@@ -1,18 +1,18 @@
-import { setCookie, getCookie } from '@tanstack/react-start/server';
+import { getCookie, setCookie } from "@tanstack/react-start/server";
 
 /**
  * Cookie name for user authentication
  */
-export const AUTH_COOKIE_NAME = 'user_id';
+export const AUTH_COOKIE_NAME = "user_id";
 
 /**
  * Cookie options for authentication cookie
  */
 const AUTH_COOKIE_OPTIONS = {
 	httpOnly: true,
-	secure: process.env.NODE_ENV === 'production',
-	sameSite: 'lax' as const,
-	path: '/',
+	secure: process.env.NODE_ENV === "production",
+	sameSite: "lax" as const,
+	path: "/",
 	maxAge: 60 * 60 * 24 * 30, // 30 days
 };
 

@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { FieldSet, FieldGroup } from '@/components/ui/field';
+import { createFileRoute } from "@tanstack/react-router";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 
-export const Route = createFileRoute('/signup-check-email')({
+export const Route = createFileRoute("/signup-check-email")({
 	component: CheckEmailPage,
 });
 
@@ -32,9 +32,8 @@ function CheckEmailPage() {
 									Check Your Email
 								</h1>
 								<p className="text-gray-400">
-									We've sent a verification link to your email
-									address. Please check your inbox and click
-									the link to complete your signup.
+									We've sent a verification link to your email address. Please
+									check your inbox and click the link to complete your signup.
 								</p>
 							</div>
 
@@ -43,9 +42,8 @@ function CheckEmailPage() {
 									<strong>Development Mode:</strong>
 								</p>
 								<p className="text-xs text-gray-400">
-									The verification URL has been logged to the
-									console. Check your server console to see the
-									signup link.
+									The verification URL has been logged to the console. Check
+									your server console to see the signup link.
 								</p>
 							</div>
 						</div>

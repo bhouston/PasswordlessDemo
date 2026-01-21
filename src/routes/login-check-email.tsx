@@ -1,19 +1,19 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { useServerFn } from '@tanstack/react-start';
-import { useEffect, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { z } from 'zod';
-import { getUserByEmail } from '@/server/user';
-import { generateLoginLink } from '@/server/auth';
-import { FieldSet, FieldGroup, Field } from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useRef } from "react";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldSet } from "@/components/ui/field";
+import { generateLoginLink } from "@/server/auth";
+import { getUserByEmail } from "@/server/user";
 
 // Zod schema for search params validation
 const loginCheckEmailSearchSchema = z.object({
-	email: z.string().email('Please provide a valid email address'),
+	email: z.string().email("Please provide a valid email address"),
 });
 
-export const Route = createFileRoute('/login-check-email')({
+export const Route = createFileRoute("/login-check-email")({
 	validateSearch: loginCheckEmailSearchSchema,
 	loaderDeps: ({ search }) => ({ email: search.email }),
 	loader: async ({ deps }) => {
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/login-check-email')({
 			if (!user) {
 				return {
 					success: false,
-					error: 'No account found with this email address',
+					error: "No account found with this email address",
 				};
 			}
 
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/login-check-email')({
 				error:
 					error instanceof Error
 						? error.message
-						: 'An error occurred while checking your account',
+						: "An error occurred while checking your account",
 			};
 		}
 	},
@@ -97,15 +97,13 @@ function LoginCheckEmailPage() {
 										Check Your Email
 									</h1>
 									<p className="text-gray-400 mb-4">
-										We've sent a login link to your email
-										address. Please check your inbox and click
-										the link to log in.
+										We've sent a login link to your email address. Please check
+										your inbox and click the link to log in.
 									</p>
 									{result.user && (
 										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
 											<p className="text-sm text-gray-300">
-												<strong>Email:</strong>{' '}
-												{result.user.email}
+												<strong>Email:</strong> {result.user.email}
 											</p>
 										</div>
 									)}
@@ -129,8 +127,8 @@ function LoginCheckEmailPage() {
 											</svg>
 										</div>
 										<p className="text-gray-300 mb-4">
-											Login link has been generated! Check
-											the console for the URL.
+											Login link has been generated! Check the console for the
+											URL.
 										</p>
 									</div>
 								)}
@@ -140,17 +138,14 @@ function LoginCheckEmailPage() {
 										<strong>Development Mode:</strong>
 									</p>
 									<p className="text-xs text-gray-400">
-										The login URL has been logged to the
-										console. Check your server console to see the
-										login link.
+										The login URL has been logged to the console. Check your
+										server console to see the login link.
 									</p>
 								</div>
 
 								<Field className="mt-6">
 									<Button
-										onClick={() =>
-											router.navigate({ to: '/' })
-										}
+										onClick={async () => await router.navigate({ to: "/" })}
 										className="w-full"
 									>
 										Go to Home
@@ -180,13 +175,13 @@ function LoginCheckEmailPage() {
 									</h1>
 									<p className="text-gray-400 mt-4">
 										{result.error ||
-											'No account found with this email address. Please check your email or sign up for a new account.'}
+											"No account found with this email address. Please check your email or sign up for a new account."}
 									</p>
 								</div>
 								<Field className="mt-6">
 									<Button
-										onClick={() =>
-											router.navigate({ to: '/login' })
+										onClick={async () =>
+											await router.navigate({ to: "/login" })
 										}
 										className="w-full"
 									>

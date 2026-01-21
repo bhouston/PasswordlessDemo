@@ -179,7 +179,7 @@ export const checkUserExists = createServerFn({ method: "POST" })
 		// Get IP address for marking IP-based attempt as successful
 		let clientIP = "unknown";
 		try {
-			clientIP = getRequestIP({ ipHeader: "x-forwarded-for" }) || "unknown";
+			clientIP = getRequestIP({ xForwardedFor: true }) ?? "unknown";
 		} catch {
 			// IP not available, use "unknown"
 		}

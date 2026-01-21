@@ -1,22 +1,25 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { verifyLoginLinkTokenAndAuthenticate } from '@/server/auth';
-import { FieldSet, FieldGroup, FieldError, Field } from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
+import { verifyLoginLinkTokenAndAuthenticate } from "@/server/auth";
 
-export const Route = createFileRoute(
-	'/login-via-link/$loginLinkToken',
-)({
+export const Route = createFileRoute("/login-via-link/$loginLinkToken")({
 	beforeLoad: async ({ params }) => {
 		// Verify token and authenticate user in beforeLoad
 		// This ensures user is authenticated before route loads
-		return await verifyLoginLinkTokenAndAuthenticate({ data: { token: params.loginLinkToken } });
+		return await verifyLoginLinkTokenAndAuthenticate({
+			data: { token: params.loginLinkToken },
+		});
+	},
+	loader: async ({ context }) => {
+		return context;
 	},
 	component: LoginViaLinkPage,
 });
 
 function LoginViaLinkPage() {
 	const router = useRouter();
-	const result = Route.useBeforeLoadData();
+	const result = Route.useLoaderData();
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -50,17 +53,14 @@ function LoginViaLinkPage() {
 									{result.user && (
 										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
 											<p className="text-sm text-gray-300">
-												<strong>Email:</strong>{' '}
-												{result.user.email}
+												<strong>Email:</strong> {result.user.email}
 											</p>
 										</div>
 									)}
 								</div>
 								<Field>
 									<Button
-										onClick={() =>
-											router.navigate({ to: '/' })
-										}
+										onClick={async () => await router.navigate({ to: "/" })}
 										className="w-full"
 									>
 										Go to Home
@@ -90,13 +90,13 @@ function LoginViaLinkPage() {
 									</h1>
 									<FieldError className="mt-4">
 										{result.error ||
-											'The login link is invalid or has expired. Please request a new login link.'}
+											"The login link is invalid or has expired. Please request a new login link."}
 									</FieldError>
 								</div>
 								<Field>
 									<Button
-										onClick={() =>
-											router.navigate({ to: '/login' })
+										onClick={async () =>
+											await router.navigate({ to: "/login" })
 										}
 										className="w-full"
 									>
