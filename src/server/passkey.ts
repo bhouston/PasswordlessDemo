@@ -1,85 +1,29 @@
-import { createServerFn } from '@tanstack/react-start';
-import { z } from 'zod';
 import {
-	generateRegistrationOptions as swaGenerateRegistrationOptions,
-	verifyRegistrationResponse as swaVerifyRegistrationResponse,
-	generateAuthenticationOptions as swaGenerateAuthenticationOptions,
-	verifyAuthenticationResponse as swaVerifyAuthenticationResponse,
-	type GenerateRegistrationOptionsOpts,
 	type GenerateAuthenticationOptionsOpts,
-	type VerifyRegistrationResponseOpts,
+	type GenerateRegistrationOptionsOpts,
+	generateAuthenticationOptions as swaGenerateAuthenticationOptions,
+	generateRegistrationOptions as swaGenerateRegistrationOptions,
+	verifyAuthenticationResponse as swaVerifyAuthenticationResponse,
+	verifyRegistrationResponse as swaVerifyRegistrationResponse,
 	type VerifyAuthenticationResponseOpts,
-	type PublicKeyCredentialCreationOptionsJSON,
-	type PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/server';
-import { getEnvConfig } from './env';
-import { db } from '@/db';
-import { users, passkeys } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { requireUser } from './middleware';
-import { setAuthCookie } from '@/lib/auth';
+	type VerifyRegistrationResponseOpts,
+} from "@simplewebauthn/server";
+import { createServerFn } from "@tanstack/react-start";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { passkeys, users } from "@/db/schema";
+import { setAuthCookie } from "@/lib/auth";
+import { getEnvConfig } from "./env";
+import { signPasskeyChallengeToken, verifyPasskeyChallengeToken } from "./jwt";
+import { requireUser } from "./middleware";
 import {
-	signPasskeyChallengeToken,
-	verifyPasskeyChallengeToken,
-} from './jwt';
-
-/**
- * Challenge expiration time (5 minutes in milliseconds)
- */
-const CHALLENGE_EXPIRATION = 5 * 60 * 1000;
-
-/**
- * Store challenge for a user in database
- */
-async function storeChallenge(userId: number, challenge: string) {
-	const expiry = new Date(Date.now() + CHALLENGE_EXPIRATION);
-	await db
-		.update(users)
-		.set({
-			passcodeChallenge: challenge,
-			passcodeChallengeExpiry: expiry,
-		})
-		.where(eq(users.id, userId));
-}
-
-/**
- * Get and remove challenge for a user from database
- */
-async function getAndRemoveChallenge(userId: number): Promise<string | null> {
-	const [user] = await db
-		.select()
-		.from(users)
-		.where(eq(users.id, userId))
-		.limit(1);
-
-	if (!user || !user.passcodeChallenge || !user.passcodeChallengeExpiry) {
-		return null;
-	}
-
-	// Check if expired
-	if (user.passcodeChallengeExpiry < new Date()) {
-		// Clear expired challenge
-		await db
-			.update(users)
-			.set({
-				passcodeChallenge: null,
-				passcodeChallengeExpiry: null,
-			})
-			.where(eq(users.id, userId));
-		return null;
-	}
-
-	// Remove challenge after use (one-time use)
-	await db
-		.update(users)
-		.set({
-			passcodeChallenge: null,
-			passcodeChallengeExpiry: null,
-		})
-		.where(eq(users.id, userId));
-
-	return user.passcodeChallenge;
-}
+	checkEmailRateLimit,
+	checkIPRateLimit,
+	hashJWT,
+	markAttemptSuccessful,
+	RateLimitError,
+} from "./rateLimit";
 
 /**
  * Convert userId to base64url encoded Uint8Array for WebAuthn userID
@@ -100,13 +44,15 @@ const generateRegistrationOptionsSchema = z.object({
  * Server function to generate registration options for passkey registration
  * Uses requireUser middleware to ensure authentication
  */
-export const generateRegistrationOptions = createServerFn({ method: 'POST' })
+export const generateRegistrationOptions = createServerFn({ method: "POST" })
 	.middleware([requireUser])
-	.inputValidator((data: unknown) => generateRegistrationOptionsSchema.parse(data))
+	.inputValidator((data: unknown) =>
+		generateRegistrationOptionsSchema.parse(data),
+	)
 	.handler(async ({ data, context }) => {
 		const user = context.user;
 		if (user.id !== data.userId) {
-			throw new Error('Not authorized');
+			throw new Error("Not authorized");
 		}
 
 		// Check if user already has a passkey (single passkey constraint)
@@ -117,7 +63,7 @@ export const generateRegistrationOptions = createServerFn({ method: 'POST' })
 			.limit(1);
 
 		if (existingPasskey.length > 0) {
-			throw new Error('User already has a passkey registered');
+			throw new Error("User already has a passkey registered");
 		}
 
 		const env = getEnvConfig();
@@ -128,46 +74,60 @@ export const generateRegistrationOptions = createServerFn({ method: 'POST' })
 			userName: data.userName,
 			userDisplayName: data.userDisplayName,
 			timeout: 60000, // 60 seconds
-			attestationType: 'none',
+			attestationType: "none",
 			authenticatorSelection: {
-				residentKey: 'required',
-				userVerification: 'required',
-				authenticatorAttachment: 'platform', // Prefer platform authenticators (Touch ID, Face ID, etc.)
+				residentKey: "required",
+				userVerification: "required",
+				authenticatorAttachment: "platform", // Prefer platform authenticators (Touch ID, Face ID, etc.)
 			},
 		};
 
 		const options = await swaGenerateRegistrationOptions(opts);
 
-		// Store challenge for verification
-		await storeChallenge(data.userId, options.challenge);
+		// Create JWT token with challenge and user identity
+		const token = await signPasskeyChallengeToken(
+			options.challenge,
+			data.userId,
+			user.email,
+		);
 
-		return options;
+		return {
+			options,
+			token,
+		};
 	});
 
 const verifyRegistrationResponseSchema = z.object({
 	response: z.unknown(),
 	userId: z.number().int().positive(),
+	token: z.string().min(1),
 });
 
 /**
  * Server function to verify registration response and store passkey
  * Uses requireUser middleware to ensure authentication
  */
-export const verifyRegistrationResponse = createServerFn({ method: 'POST' })
+export const verifyRegistrationResponse = createServerFn({ method: "POST" })
 	.middleware([requireUser])
-	.inputValidator((data: unknown) => verifyRegistrationResponseSchema.parse(data))
+	.inputValidator((data: unknown) =>
+		verifyRegistrationResponseSchema.parse(data),
+	)
 	.handler(async ({ data, context }) => {
 		const user = context.user;
 		if (user.id !== data.userId) {
-			throw new Error('Not authorized');
+			throw new Error("Not authorized");
 		}
 
 		try {
-			const expectedChallenge = await getAndRemoveChallenge(data.userId);
-			if (!expectedChallenge) {
+			// Verify token and extract challenge
+			const tokenPayload = await verifyPasskeyChallengeToken(data.token);
+			const expectedChallenge = tokenPayload.challenge;
+
+			// Verify the userId matches
+			if (tokenPayload.userId !== data.userId) {
 				return {
 					success: false,
-					error: 'Challenge not found or expired. Please try again.',
+					error: "Token user ID does not match",
 				};
 			}
 
@@ -181,7 +141,7 @@ export const verifyRegistrationResponse = createServerFn({ method: 'POST' })
 			if (existingPasskey.length > 0) {
 				return {
 					success: false,
-					error: 'User already has a passkey registered',
+					error: "User already has a passkey registered",
 				};
 			}
 
@@ -199,7 +159,7 @@ export const verifyRegistrationResponse = createServerFn({ method: 'POST' })
 			if (!verification.verified || !verification.registrationInfo) {
 				return {
 					success: false,
-					error: 'Registration verification failed',
+					error: "Registration verification failed",
 				};
 			}
 
@@ -209,7 +169,9 @@ export const verifyRegistrationResponse = createServerFn({ method: 'POST' })
 			const transports = (registrationInfo as any).transports;
 
 			// Convert publicKey (Uint8Array) to base64url for storage
-			const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64url');
+			const publicKeyBase64 = Buffer.from(credential.publicKey).toString(
+				"base64url",
+			);
 
 			// Store passkey in database
 			await db.insert(passkeys).values({
@@ -227,58 +189,9 @@ export const verifyRegistrationResponse = createServerFn({ method: 'POST' })
 				error:
 					error instanceof Error
 						? error.message
-						: 'Registration verification failed',
+						: "Registration verification failed",
 			};
 		}
-	});
-
-const generateAuthenticationOptionsSchema = z.object({
-	userId: z.number().int().positive(),
-});
-
-/**
- * Server function to generate authentication options for passkey login
- * NOTE: This is kept for backward compatibility but is no longer used in the authentication flow.
- * The new flow uses initiatePasskeyLogin instead.
- */
-export const generateAuthenticationOptions = createServerFn({ method: 'POST' })
-	.inputValidator((data: unknown) => generateAuthenticationOptionsSchema.parse(data))
-	.handler(async ({ data }) => {
-		// Fetch user's passkey
-		const userPasskey = await db
-			.select()
-			.from(passkeys)
-			.where(eq(passkeys.userId, data.userId))
-			.limit(1);
-
-		if (userPasskey.length === 0) {
-			return null;
-		}
-
-		const passkey = userPasskey[0];
-		const transports = passkey.transports
-			? (JSON.parse(passkey.transports) as string[])
-			: undefined;
-
-		const env = getEnvConfig();
-		const opts: GenerateAuthenticationOptionsOpts = {
-			rpID: env.RP_ID,
-			timeout: 60000, // 60 seconds
-			allowCredentials: [
-				{
-					id: passkey.credentialId,
-					transports: transports as any,
-				},
-			],
-			userVerification: 'required',
-		};
-
-		const options = await swaGenerateAuthenticationOptions(opts);
-
-		// Store challenge for verification
-		await storeChallenge(data.userId, options.challenge);
-
-		return options;
 	});
 
 const initiatePasskeyLoginSchema = z.object({
@@ -289,7 +202,7 @@ const initiatePasskeyLoginSchema = z.object({
  * Server function to initiate passkey login by generating authentication options and JWT token
  * This replaces the old flow that stored challenges in the database
  */
-export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
+export const initiatePasskeyLogin = createServerFn({ method: "POST" })
 	.inputValidator((data: unknown) => initiatePasskeyLoginSchema.parse(data))
 	.handler(async ({ data }) => {
 		// Fetch user by email
@@ -302,7 +215,7 @@ export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
 		if (!user) {
 			return {
 				success: false,
-				error: 'User not found',
+				error: "User not found",
 			};
 		}
 
@@ -316,7 +229,7 @@ export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
 		if (userPasskey.length === 0) {
 			return {
 				success: false,
-				error: 'No passkey found for this user',
+				error: "No passkey found for this user",
 			};
 		}
 
@@ -335,7 +248,7 @@ export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
 					transports: transports as any,
 				},
 			],
-			userVerification: 'required',
+			userVerification: "required",
 		};
 
 		const options = await swaGenerateAuthenticationOptions(opts);
@@ -347,6 +260,23 @@ export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
 			user.email,
 		);
 
+		// Hash token for rate limiting
+		const tokenHash = hashJWT(token);
+
+		try {
+			// Check rate limits (both IP and email) with jwtHash
+			await checkIPRateLimit("passkey-attempt", tokenHash);
+			await checkEmailRateLimit(data.email, "passkey-attempt", tokenHash);
+		} catch (error) {
+			if (error instanceof RateLimitError) {
+				return {
+					success: false,
+					error: error.message,
+				};
+			}
+			throw error;
+		}
+
 		return {
 			success: true,
 			options,
@@ -354,7 +284,7 @@ export const initiatePasskeyLogin = createServerFn({ method: 'POST' })
 		};
 	});
 
-const verifyPasskeyTokenAndGetOptionsSchema = z.object({
+const getPasskeyAssertionOptionsSchema = z.object({
 	token: z.string().min(1),
 });
 
@@ -362,8 +292,10 @@ const verifyPasskeyTokenAndGetOptionsSchema = z.object({
  * Server function to verify passkey challenge token and generate authentication options
  * Used in route loaders to prepare passkey authentication
  */
-export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
-	.inputValidator((data: unknown) => verifyPasskeyTokenAndGetOptionsSchema.parse(data))
+export const getPasskeyAssertionOptions = createServerFn({ method: "GET" })
+	.inputValidator((data: unknown) =>
+		getPasskeyAssertionOptionsSchema.parse(data),
+	)
 	.handler(async ({ data }) => {
 		try {
 			// Verify token and extract challenge/user info
@@ -379,7 +311,7 @@ export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
 			if (!user) {
 				return {
 					success: false,
-					error: 'User not found',
+					error: "User not found",
 					email: tokenPayload.email,
 				};
 			}
@@ -394,7 +326,7 @@ export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
 			if (userPasskey.length === 0) {
 				return {
 					success: false,
-					error: 'No passkey found for this user',
+					error: "No passkey found for this user",
 					email: tokenPayload.email,
 				};
 			}
@@ -415,7 +347,7 @@ export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
 						transports: transports as any,
 					},
 				],
-				userVerification: 'required',
+				userVerification: "required",
 			};
 
 			// Generate options (this will create a new challenge, but we'll replace it)
@@ -437,9 +369,7 @@ export const verifyPasskeyTokenAndGetOptions = createServerFn({ method: 'GET' })
 			return {
 				success: false,
 				error:
-					error instanceof Error
-						? error.message
-						: 'Token verification failed',
+					error instanceof Error ? error.message : "Token verification failed",
 			};
 		}
 	});
@@ -454,8 +384,10 @@ const verifyAuthenticationResponseSchema = z.object({
  * Also sets authentication cookie on success
  * Now uses JWT token to extract challenge instead of database
  */
-export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
-	.inputValidator((data: unknown) => verifyAuthenticationResponseSchema.parse(data))
+export const verifyAuthenticationResponse = createServerFn({ method: "POST" })
+	.inputValidator((data: unknown) =>
+		verifyAuthenticationResponseSchema.parse(data),
+	)
 	.handler(async ({ data }) => {
 		try {
 			// Verify token and extract challenge
@@ -473,13 +405,13 @@ export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
 			if (userPasskey.length === 0) {
 				return {
 					success: false,
-					error: 'Passkey not found',
+					error: "Passkey not found",
 				};
 			}
 
 			const passkey = userPasskey[0];
 			// Convert base64url back to Uint8Array
-			const publicKeyBuffer = Buffer.from(passkey.publicKey, 'base64url');
+			const publicKeyBuffer = Buffer.from(passkey.publicKey, "base64url");
 			const publicKey = new Uint8Array(
 				publicKeyBuffer.buffer,
 				publicKeyBuffer.byteOffset,
@@ -505,7 +437,7 @@ export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
 			if (!verification.verified) {
 				return {
 					success: false,
-					error: 'Authentication verification failed',
+					error: "Authentication verification failed",
 				};
 			}
 
@@ -515,28 +447,32 @@ export const verifyAuthenticationResponse = createServerFn({ method: 'POST' })
 				if (newCounter <= passkey.counter) {
 					return {
 						success: false,
-						error: 'Invalid signature counter. Possible cloned credential.',
+						error: "Invalid signature counter. Possible cloned credential.",
 					};
 				}
 
-			// Update counter in database
-			await db
-				.update(passkeys)
-				.set({ counter: newCounter })
-				.where(eq(passkeys.id, passkey.id));
-		}
+				// Update counter in database
+				await db
+					.update(passkeys)
+					.set({ counter: newCounter })
+					.where(eq(passkeys.id, passkey.id));
+			}
 
-		// Set authentication cookie on successful verification
-		setAuthCookie(userId);
+			// Mark rate limit attempt as successful
+			const tokenHash = hashJWT(data.token);
+			await markAttemptSuccessful(tokenHash, "passkey-attempt");
 
-		return { success: true };
+			// Set authentication cookie on successful verification
+			setAuthCookie(userId);
+
+			return { success: true };
 		} catch (error) {
 			return {
 				success: false,
 				error:
 					error instanceof Error
 						? error.message
-						: 'Authentication verification failed',
+						: "Authentication verification failed",
 			};
 		}
 	});
@@ -549,13 +485,13 @@ const deletePasskeySchema = z.object({
  * Server function to delete passkey for a user
  * Uses requireUser middleware to ensure authentication
  */
-export const deletePasskey = createServerFn({ method: 'POST' })
+export const deletePasskey = createServerFn({ method: "POST" })
 	.middleware([requireUser])
 	.inputValidator((data: unknown) => deletePasskeySchema.parse(data))
 	.handler(async ({ data, context }) => {
 		const user = context.user;
 		if (user.id !== data.userId) {
-			throw new Error('Not authorized');
+			throw new Error("Not authorized");
 		}
 
 		await db.delete(passkeys).where(eq(passkeys.userId, data.userId));

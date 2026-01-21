@@ -1,19 +1,14 @@
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
-import { useRouter } from '@tanstack/react-router';
-import { startRegistration } from '@simplewebauthn/browser';
+import { startRegistration } from "@simplewebauthn/browser";
+import { useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
+	deletePasskey,
 	generateRegistrationOptions,
 	verifyRegistrationResponse,
-	deletePasskey,
-} from '@/server/passkey';
-import {
-	Field,
-	FieldError,
-	FieldGroup,
-	FieldSet,
-} from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
+} from "@/server/passkey";
 
 interface PasskeyComponentProps {
 	userId: number;
@@ -32,7 +27,9 @@ export function PasskeyComponent({
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
-	const generateRegistrationOptionsFn = useServerFn(generateRegistrationOptions);
+	const generateRegistrationOptionsFn = useServerFn(
+		generateRegistrationOptions,
+	);
 	const verifyRegistrationResponseFn = useServerFn(verifyRegistrationResponse);
 	const deletePasskeyFn = useServerFn(deletePasskey);
 
@@ -43,7 +40,7 @@ export function PasskeyComponent({
 
 		try {
 			// Generate registration options from server
-			const options = await generateRegistrationOptionsFn({
+			const result = await generateRegistrationOptionsFn({
 				data: {
 					userId,
 					userName,
@@ -51,9 +48,13 @@ export function PasskeyComponent({
 				},
 			});
 
+			if (!result.options || !result.token) {
+				throw new Error("Failed to generate registration options");
+			}
+
 			// Start registration on client
 			const registrationResponse = await startRegistration({
-				optionsJSON: options,
+				optionsJSON: result.options,
 			});
 
 			// Verify registration on server
@@ -61,32 +62,33 @@ export function PasskeyComponent({
 				data: {
 					response: registrationResponse,
 					userId,
+					token: result.token,
 				},
 			});
 
 			if (verification.success) {
-				setSuccessMessage('Passkey registered successfully!');
+				setSuccessMessage("Passkey registered successfully!");
 				// Invalidate router to refresh data
 				router.invalidate();
 			} else {
-				setError(verification.error || 'Failed to register passkey');
+				setError(verification.error || "Failed to register passkey");
 			}
 		} catch (err) {
 			if (err instanceof Error) {
 				// Handle user cancellation gracefully
 				if (
-					err.message.includes('cancelled') ||
-					err.message.includes('abort') ||
-					err.message.includes('NotAllowedError')
+					err.message.includes("cancelled") ||
+					err.message.includes("abort") ||
+					err.message.includes("NotAllowedError")
 				) {
-					setError('Registration cancelled');
-				} else if (err.message.includes('NotSupportedError')) {
-					setError('Passkeys are not supported on this device or browser');
+					setError("Registration cancelled");
+				} else if (err.message.includes("NotSupportedError")) {
+					setError("Passkeys are not supported on this device or browser");
 				} else {
-					setError(err.message || 'Failed to register passkey');
+					setError(err.message || "Failed to register passkey");
 				}
 			} else {
-				setError('Failed to register passkey. Please try again.');
+				setError("Failed to register passkey. Please try again.");
 			}
 		} finally {
 			setIsLoading(false);
@@ -96,7 +98,7 @@ export function PasskeyComponent({
 	const handleDeletePasskey = async () => {
 		if (
 			!confirm(
-				'Are you sure you want to delete your passkey? You will need to register a new one to use passkey login.',
+				"Are you sure you want to delete your passkey? You will need to register a new one to use passkey login.",
 			)
 		) {
 			return;
@@ -108,14 +110,14 @@ export function PasskeyComponent({
 
 		try {
 			await deletePasskeyFn({ data: { userId } });
-			setSuccessMessage('Passkey deleted successfully!');
+			setSuccessMessage("Passkey deleted successfully!");
 			// Invalidate router to refresh data
 			router.invalidate();
 		} catch (err) {
 			setError(
 				err instanceof Error
 					? err.message
-					: 'Failed to delete passkey. Please try again.',
+					: "Failed to delete passkey. Please try again.",
 			);
 		} finally {
 			setIsLoading(false);
@@ -138,7 +140,7 @@ export function PasskeyComponent({
 					<div className="mb-4">
 						<div className="p-4 bg-slate-700/50 rounded-lg">
 							<p className="text-sm text-gray-300">
-								<strong>Status:</strong>{' '}
+								<strong>Status:</strong>{" "}
 								{hasPasskey ? (
 									<span className="text-green-400">Passkey registered</span>
 								) : (
@@ -147,15 +149,14 @@ export function PasskeyComponent({
 							</p>
 							{hasPasskey && (
 								<p className="text-xs text-gray-400 mt-2">
-									You can use your passkey to log in securely without a password.
+									You can use your passkey to log in securely without a
+									password.
 								</p>
 							)}
 						</div>
 					</div>
 
-					{error && (
-						<FieldError className="mb-4">{error}</FieldError>
-					)}
+					{error && <FieldError className="mb-4">{error}</FieldError>}
 
 					{successMessage && (
 						<div className="p-4 bg-green-500/20 border border-green-500/50 rounded-lg mb-4">
@@ -170,14 +171,11 @@ export function PasskeyComponent({
 								disabled={isLoading}
 								variant="destructive"
 							>
-								{isLoading ? 'Deleting...' : 'Delete Passkey'}
+								{isLoading ? "Deleting..." : "Delete Passkey"}
 							</Button>
 						) : (
-							<Button
-								onClick={handleAddPasskey}
-								disabled={isLoading}
-							>
-								{isLoading ? 'Registering...' : 'Add Passkey'}
+							<Button onClick={handleAddPasskey} disabled={isLoading}>
+								{isLoading ? "Registering..." : "Add Passkey"}
 							</Button>
 						)}
 					</Field>

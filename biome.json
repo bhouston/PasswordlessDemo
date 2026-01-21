@@ -13,12 +13,10 @@
 			"**/index.html",
 			"**/vite.config.ts",
 			"!**/src/routeTree.gen.ts",
-			"!**/src/styles.css"
-		],
-		"ignore": [
-			"**/drizzle/**",
-			"**/db.sqlite",
-			"**/db.sqlite-journal"
+			"!**/src/styles.css",
+			"!**/drizzle/**",
+			"!**/db.sqlite",
+			"!**/db.sqlite-journal"
 		]
 	},
 	"formatter": {

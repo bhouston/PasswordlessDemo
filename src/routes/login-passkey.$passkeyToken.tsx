@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import {
-	verifyPasskeyTokenAndGetOptions,
+	getPasskeyAssertionOptions,
 	verifyAuthenticationResponse,
 } from '@/server/passkey';
 import {
@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 
 export const Route = createFileRoute('/login-passkey/$passkeyToken')({
 	loader: async ({ params }) => {
-		const result = await verifyPasskeyTokenAndGetOptions({
+		const result = await getPasskeyAssertionOptions({
 			data: { token: params.passkeyToken },
 		});
 
