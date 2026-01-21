@@ -7,3 +7,6 @@ export const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key-change-in-pr
 
 // Token expiration time (24 hours in seconds)
 export const REGISTRATION_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
+
+// Login link token expiration (1 hour in seconds)
+export const LOGIN_LINK_TOKEN_EXPIRATION = 60 * 60; // 1 hour

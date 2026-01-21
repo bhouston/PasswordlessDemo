@@ -1,50 +1,40 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { verifyRegistrationToken } from '@/lib/jwt';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { verifyLoginLinkToken } from '@/lib/jwt';
 import { setAuthCookie } from '@/lib/auth';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { FieldSet, FieldGroup, FieldError } from '@/components/ui/field';
+import { FieldSet, FieldGroup, FieldError, Field } from '@/components/ui/field';
+import { Button } from '@/components/ui/button';
 
 export const Route = createFileRoute(
-	'/auth/register/$registrationToken',
+	'/login-via-link/$loginLinkToken',
 )({
 	loader: async ({ params }) => {
 		try {
 			// Verify the token
-			const payload = await verifyRegistrationToken(
-				params.registrationToken,
-			);
+			const payload = await verifyLoginLinkToken(params.loginLinkToken);
 
-			// Check if user already exists
-			const existingUser = await db
+			// Verify user exists in database
+			const user = await db
 				.select()
 				.from(users)
-				.where(eq(users.email, payload.email))
+				.where(eq(users.id, payload.userId))
 				.limit(1);
 
-			if (existingUser.length > 0) {
+			if (user.length === 0) {
 				return {
 					success: false,
-					error: 'An account with this email already exists',
+					error: 'User not found',
 				};
 			}
 
-			// Create the user
-			const [newUser] = await db
-				.insert(users)
-				.values({
-					name: payload.name,
-					email: payload.email,
-				})
-				.returning();
-
 			// Set authentication cookie
-			setAuthCookie(newUser.id);
+			setAuthCookie(payload.userId);
 
 			return {
 				success: true,
-				user: newUser,
+				user: user[0],
 			};
 		} catch (error) {
 			return {
@@ -52,14 +42,15 @@ export const Route = createFileRoute(
 				error:
 					error instanceof Error
 						? error.message
-						: 'Registration failed. The link may be invalid or expired.',
+						: 'Login failed. The link may be invalid or expired.',
 			};
 		}
 	},
-	component: RegisterPage,
+	component: LoginViaLinkPage,
 });
 
-function RegisterPage() {
+function LoginViaLinkPage() {
+	const router = useRouter();
 	const result = Route.useLoaderData();
 
 	return (
@@ -86,18 +77,13 @@ function RegisterPage() {
 										</svg>
 									</div>
 									<h1 className="text-3xl font-bold text-white mb-2">
-										Registration Confirmed
+										Login Successful
 									</h1>
 									<p className="text-gray-400">
-										Your account has been successfully
-										created!
+										You have been successfully logged in!
 									</p>
 									{result.user && (
 										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
-											<p className="text-sm text-gray-300">
-												<strong>Name:</strong>{' '}
-												{result.user.name}
-											</p>
 											<p className="text-sm text-gray-300">
 												<strong>Email:</strong>{' '}
 												{result.user.email}
@@ -105,6 +91,16 @@ function RegisterPage() {
 										</div>
 									)}
 								</div>
+								<Field>
+									<Button
+										onClick={() =>
+											router.navigate({ to: '/' })
+										}
+										className="w-full"
+									>
+										Go to Home
+									</Button>
+								</Field>
 							</div>
 						) : (
 							<div className="text-center">
@@ -125,13 +121,23 @@ function RegisterPage() {
 										</svg>
 									</div>
 									<h1 className="text-3xl font-bold text-white mb-2">
-										Registration Failed
+										Login Failed
 									</h1>
 									<FieldError className="mt-4">
 										{result.error ||
-											'The registration link is invalid or has expired. Please request a new verification email.'}
+											'The login link is invalid or has expired. Please request a new login link.'}
 									</FieldError>
 								</div>
+								<Field>
+									<Button
+										onClick={() =>
+											router.navigate({ to: '/login' })
+										}
+										className="w-full"
+									>
+										Try Again
+									</Button>
+								</Field>
 							</div>
 						)}
 					</FieldGroup>
