@@ -15,35 +15,39 @@ import { Input } from "@/components/ui/input";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { useToastMutation } from "@/hooks/useToastMutation";
 import { redirectToSchema } from "@/lib/schemas";
-import { requestLoginLink } from "@/server/auth";
+import { requestLoginCode } from "@/server/auth";
 
 // Zod schema for form validation
 const loginRequestSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
 });
 
-export const Route = createFileRoute("/login-request-login-link")({
+export const Route = createFileRoute("/login-request-code")({
 	validateSearch: redirectToSchema,
-	component: LoginRequestLoginLinkPage,
+	component: LoginRequestCodePage,
 });
 
-function LoginRequestLoginLinkPage() {
+function LoginRequestCodePage() {
 	const router = useRouter();
 	const { redirectTo } = Route.useSearch();
 	const [formError, setFormError] = useState<string>();
-	const requestLoginLinkFn = useServerFn(requestLoginLink);
+	const requestLoginCodeFn = useServerFn(requestLoginCode);
 
-	const requestLinkMutation = useToastMutation({
-		action: "Send login link email",
+	const requestCodeMutation = useToastMutation({
+		action: "Send login code email",
 		mutationFn: async (variables: { email: string }) => {
-			await requestLoginLinkFn({ data: variables });
+			const result = await requestLoginCodeFn({ data: variables });
+			return result;
 		},
-		onSuccess: async () => {
-			// Navigate to check-email page
-			await router.navigate({
-				to: "/login-check-email",
-				search: { reason: "login_link_sent", redirectTo },
-			});
+		onSuccess: async (result) => {
+			// Always redirect to code entry page (token always returned to prevent enumeration)
+			if (result.token) {
+				await router.navigate({
+					to: "/login-via-code/$codeVerificationToken",
+					params: { codeVerificationToken: result.token },
+					search: { redirectTo },
+				});
+			}
 		},
 		setFormError,
 	});
@@ -56,12 +60,12 @@ function LoginRequestLoginLinkPage() {
 			onChange: loginRequestSchema,
 		},
 		onSubmit: async ({ value }) => {
-			await requestLinkMutation.mutateAsync(value);
+			await requestCodeMutation.mutateAsync(value);
 		},
 	});
 
 	return (
-		<AuthLayout title="Request Login Link">
+		<AuthLayout title="Request Login Code">
 			<form
 				onSubmit={async (e) => {
 					e.preventDefault();
@@ -85,7 +89,7 @@ function LoginRequestLoginLinkPage() {
 									placeholder="john@example.com"
 								/>
 								<FieldDescription>
-									We'll send you a login link to this email address
+									We'll send you a login code to this email address
 								</FieldDescription>
 								{field.state.meta.errors.length > 0 && (
 									<FieldError>{field.state.meta.errors[0]}</FieldError>
@@ -108,7 +112,7 @@ function LoginRequestLoginLinkPage() {
 									disabled={!canSubmit || isSubmitting || !isTouched}
 									className="w-full"
 								>
-									{isSubmitting ? "Sending Login Link..." : "Send Login Link"}
+									{isSubmitting ? "Sending Login Code..." : "Send Login Code"}
 								</Button>
 							</Field>
 						)}

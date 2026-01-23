@@ -3,7 +3,7 @@ import { getEnvConfig } from "./env";
 
 // Token expiration times (in seconds)
 const SIGNUP_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
-const LOGIN_LINK_TOKEN_EXPIRATION = 60 * 60; // 1 hour
+const CODE_VERIFICATION_TOKEN_EXPIRATION = 15 * 60; // 15 minutes
 const PASSKEY_CHALLENGE_TOKEN_EXPIRATION = 10 * 60; // 10 minutes
 
 /**
@@ -17,10 +17,12 @@ export interface SignupTokenPayload {
 }
 
 /**
- * Login link token payload
+ * Code verification token payload
  */
-export interface LoginLinkTokenPayload {
-	userId: number;
+export interface CodeVerificationTokenPayload {
+	userId?: number; // Present if account exists
+	email?: string; // Present if account doesn't exist
+	codeHash: string; // Always present
 	iat: number;
 	exp: number;
 }
@@ -104,32 +106,45 @@ export async function verifySignupToken(
 }
 
 /**
- * Creates a JWT token for login link verification
- * @param userId - User's ID
+ * Creates a JWT token for code verification
+ * @param userId - User's ID (null if account doesn't exist)
+ * @param email - User's email (always required)
+ * @param codeHash - Hashed OTP code
  * @returns Signed JWT token string
  */
-export async function signLoginLinkToken(userId: number): Promise<string> {
+export async function signCodeVerificationToken(
+	userId: number | null,
+	email: string,
+	codeHash: string,
+): Promise<string> {
 	const env = getEnvConfig();
 	const secret = new TextEncoder().encode(env.JWT_SECRET);
 	const now = Math.floor(Date.now() / 1000);
 
-	const token = await new SignJWT({ userId })
+	const payload: Record<string, unknown> = { codeHash };
+	if (userId !== null) {
+		payload.userId = userId;
+	} else {
+		payload.email = email;
+	}
+
+	const token = await new SignJWT(payload)
 		.setProtectedHeader({ alg: "HS256" })
 		.setIssuedAt(now)
-		.setExpirationTime(now + LOGIN_LINK_TOKEN_EXPIRATION)
+		.setExpirationTime(now + CODE_VERIFICATION_TOKEN_EXPIRATION)
 		.sign(secret);
 
 	return token;
 }
 
 /**
- * Verifies and extracts payload from a login link token
+ * Verifies and extracts payload from a code verification token
  * @param token - JWT token string
  * @returns Token payload if valid, throws error if invalid/expired
  */
-export async function verifyLoginLinkToken(
+export async function verifyCodeVerificationToken(
 	token: string,
-): Promise<LoginLinkTokenPayload> {
+): Promise<CodeVerificationTokenPayload> {
 	const env = getEnvConfig();
 	const secret = new TextEncoder().encode(env.JWT_SECRET);
 
@@ -139,12 +154,26 @@ export async function verifyLoginLinkToken(
 		});
 
 		// Validate payload structure
-		if (typeof payload.userId !== "number") {
+		if (typeof payload.codeHash !== "string") {
 			throw new Error("Invalid token payload structure");
 		}
 
+		// Either userId or email must be present, but not both
+		const hasUserId = typeof payload.userId === "number";
+		const hasEmail = typeof payload.email === "string";
+
+		if (!hasUserId && !hasEmail) {
+			throw new Error("Invalid token payload structure: missing userId or email");
+		}
+
+		if (hasUserId && hasEmail) {
+			throw new Error("Invalid token payload structure: cannot have both userId and email");
+		}
+
 		return {
-			userId: payload.userId,
+			userId: hasUserId ? payload.userId as number : undefined,
+			email: hasEmail ? payload.email as string : undefined,
+			codeHash: payload.codeHash,
 			iat: payload.iat as number,
 			exp: payload.exp as number,
 		};

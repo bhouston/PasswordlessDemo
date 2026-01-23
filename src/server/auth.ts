@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestIP } from "@tanstack/react-start/server";
+import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -7,9 +8,9 @@ import { users } from "@/db/schema";
 import { clearAuthCookie, setAuthCookie } from "@/lib/auth";
 import { getEnvConfig } from "./env";
 import {
-	signLoginLinkToken,
+	signCodeVerificationToken,
 	signSignupToken,
-	verifyLoginLinkToken,
+	verifyCodeVerificationToken,
 	verifySignupToken,
 } from "./jwt";
 import {
@@ -27,7 +28,7 @@ const signupSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
 });
 
-const requestLoginLinkSchema = z.object({
+const requestLoginCodeSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
 });
 
@@ -35,8 +36,9 @@ const verifySignupTokenSchema = z.object({
 	token: z.string().min(1, "Token is required"),
 });
 
-const verifyLoginLinkTokenSchema = z.object({
+const verifyLoginCodeSchema = z.object({
 	token: z.string().min(1, "Token is required"),
+	code: z.string().length(6, "Code must be 6 digits"),
 });
 
 /**
@@ -144,17 +146,42 @@ export const verifySignupTokenAndCreateUser = createServerFn({
 
 
 /**
- * Server function to request login link by email
+ * Generate a 6-digit OTP code
+ * @returns 6-digit numeric code as string
+ */
+function generateOTPCode(): string {
+	return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * Hash an OTP code using SHA-256
+ * @param code - OTP code to hash
+ * @returns Hashed code as hex string
+ */
+function hashOTPCode(code: string): string {
+	return createHash("sha256").update(code).digest("hex");
+}
+
+/**
+ * Generate a random code hash for non-existent accounts (to prevent information leak)
+ * @returns Random hash string
+ */
+function generateRandomCodeHash(): string {
+	return createHash("sha256").update(randomBytes(32)).digest("hex");
+}
+
+/**
+ * Server function to request login code by email
  * Handles both existing and non-existing accounts to prevent enumeration
  * Rate limited by IP and email address
  */
-export const requestLoginLink = createServerFn({ method: "POST" })
-	.inputValidator((data: unknown) => requestLoginLinkSchema.parse(data))
+export const requestLoginCode = createServerFn({ method: "POST" })
+	.inputValidator((data: unknown) => requestLoginCodeSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
 			// Check rate limits (both IP and email)
-			await checkIPRateLimit("login-link");
-			await checkEmailRateLimit(data.email, "login-link");
+			await checkIPRateLimit("login-code");
+			await checkEmailRateLimit(data.email, "login-code");
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				throw new Error(error.message);
@@ -172,35 +199,41 @@ export const requestLoginLink = createServerFn({ method: "POST" })
 		const env = getEnvConfig();
 
 		if (user) {
-			// User exists - send login link email
-			const token = await signLoginLinkToken(user.id);
+			// User exists - generate OTP and send code email
+			const code = generateOTPCode();
+			const codeHash = hashOTPCode(code);
+			const token = await signCodeVerificationToken(user.id, data.email, codeHash);
 			const tokenHash = hashJWT(token);
-			const loginUrl = `${env.BASE_URL}/login-via-link/${token}`;
 
 			// Mark attempt as successful
-			await markAttemptSuccessful(tokenHash, "login-link");
+			await markAttemptSuccessful(tokenHash, "login-code");
 
-			// Log the URL to console (instead of sending email)
+			// Log the code to console (instead of sending email)
 			if (env.NODE_ENV === "development") {
-				console.log("\n=== Login Link ===");
+				console.log("\n=== Login Code ===");
 				console.log(`Email: ${user.email}`);
-				console.log(`Login URL: ${loginUrl}`);
+				console.log(`Code: ${code}`);
 				console.log("==================\n");
 			}
+
+			// Always return token to prevent enumeration
+			return { success: true, token };
 		} else {
-			// User doesn't exist - send "account doesn't exist" email
+			// User doesn't exist - generate random codeHash and send "account doesn't exist" email
+			const randomCodeHash = generateRandomCodeHash();
+			const token = await signCodeVerificationToken(null, data.email, randomCodeHash);
 			const signupUrl = `${env.BASE_URL}/signup`;
 
 			// Mark attempt as bad-email
 			await markAttemptAsBadEmail(
 				getRequestIP({ xForwardedFor: true }) ?? "unknown",
 				"ip",
-				"login-link",
+				"login-code",
 			);
 			await markAttemptAsBadEmail(
 				data.email.toLowerCase(),
 				"email",
-				"login-link",
+				"login-code",
 			);
 
 			// Log the message to console (instead of sending email)
@@ -213,49 +246,71 @@ export const requestLoginLink = createServerFn({ method: "POST" })
 				console.log(`If you want to create an account, please visit: ${signupUrl}`);
 				console.log("==========================================\n");
 			}
-		}
 
-		// Always return success (don't reveal account existence)
-		return { success: true };
+			// Always return token to prevent enumeration
+			return { success: true, token };
+		}
 	});
 
 /**
- * Server function to verify login link token and authenticate user
- * Used in beforeLoad to ensure user is authenticated before route loads
+ * Server function to verify login code and authenticate user
+ * Used to verify the OTP code entered by the user
  */
-export const verifyLoginLinkTokenAndAuthenticate = createServerFn({
+export const verifyLoginCodeAndAuthenticate = createServerFn({
 	method: "POST",
 })
-	.inputValidator((data: unknown) => verifyLoginLinkTokenSchema.parse(data))
+	.inputValidator((data: unknown) => verifyLoginCodeSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
 			// Verify the token
-			const payload = await verifyLoginLinkToken(data.token);
+			const payload = await verifyCodeVerificationToken(data.token);
 
-			// Verify user exists in database
-			const user = await db
-				.select()
-				.from(users)
-				.where(eq(users.id, payload.userId))
-				.limit(1);
+			// Hash the submitted code
+			const submittedCodeHash = hashOTPCode(data.code);
 
-			if (user.length === 0) {
+			// Compare hashes
+			if (payload.codeHash !== submittedCodeHash) {
+				// Generic error - don't reveal if account exists or code was wrong
 				return {
 					success: false,
-					error: "User not found",
+					error: "Invalid code. Please check your email and try again.",
 				};
 			}
 
-			// Mark rate limit attempt as successful
-			const tokenHash = hashJWT(data.token);
-			await markAttemptSuccessful(tokenHash, "login-link");
+			// If userId exists and code matches, authenticate user
+			if (payload.userId) {
+				// Verify user exists in database
+				const user = await db
+					.select()
+					.from(users)
+					.where(eq(users.id, payload.userId))
+					.limit(1);
 
-			// Set authentication cookie
-			setAuthCookie(payload.userId);
+				if (user.length === 0) {
+					return {
+						success: false,
+						error: "Invalid code. Please check your email and try again.",
+					};
+				}
 
+				// Mark rate limit attempt as successful
+				const tokenHash = hashJWT(data.token);
+				await markAttemptSuccessful(tokenHash, "login-code");
+
+				// Set authentication cookie
+				setAuthCookie(payload.userId);
+
+				return {
+					success: true,
+					user: user[0],
+				};
+			}
+
+			// If email exists (no userId), code verification will always fail
+			// Return generic error to prevent enumeration
 			return {
-				success: true,
-				user: user[0],
+				success: false,
+				error: "Invalid code. Please check your email and try again.",
 			};
 		} catch (error) {
 			return {
@@ -263,7 +318,7 @@ export const verifyLoginLinkTokenAndAuthenticate = createServerFn({
 				error:
 					error instanceof Error
 						? error.message
-						: "Login failed. The link may be invalid or expired.",
+						: "Invalid code. Please check your email and try again.",
 			};
 		}
 	});

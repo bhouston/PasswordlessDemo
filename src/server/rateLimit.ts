@@ -12,7 +12,7 @@ const RATE_LIMIT_CONFIG = {
 		maxRequests: 5,
 		windowMs: 60 * 60 * 1000, // 1 hour
 	},
-	"login-link": {
+	"login-code": {
 		maxRequests: 5,
 		windowMs: 60 * 60 * 1000, // 1 hour
 	},

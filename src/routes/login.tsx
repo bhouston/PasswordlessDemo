@@ -59,14 +59,14 @@ function LoginPage() {
 						<Button
 							onClick={() => {
 								void navigate({
-									to: "/login-request-login-link",
+									to: "/login-request-code",
 									search: { redirectTo },
 								});
 							}}
 							className="w-full"
 							variant="outline"
 						>
-							Login via Email Link
+							Login via Email Code
 						</Button>
 					</Field>
 				</div>

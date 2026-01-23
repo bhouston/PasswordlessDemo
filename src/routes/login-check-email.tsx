@@ -6,15 +6,13 @@ import { redirectToSchema } from "@/lib/schemas";
 // Zod schema for search params validation
 const checkEmailSearchSchema = z.object({
 	reason: z
-		.enum(["login_link_sent", "signup_link_sent"])
+		.enum(["signup_link_sent"])
 		.optional()
-		.default("login_link_sent"),
+		.default("signup_link_sent"),
 	email: z.string().email().optional(),
 });
 
 const reasonToText: Record<string, string> = {
-	login_link_sent:
-		"A login link has been sent to your email. Please check your inbox and click the link to sign in.",
 	signup_link_sent:
 		"A signup link has been sent to your email. Please check your inbox and click the link to complete your registration.",
 };
@@ -28,9 +26,9 @@ export const Route = createFileRoute("/login-check-email")({
 });
 
 function LoginCheckEmailPage() {
-	const { reason = "login_link_sent", email, redirectTo } = Route.useSearch();
+	const { reason = "signup_link_sent", email, redirectTo } = Route.useSearch();
 
-	const text = reasonToText[reason] || reasonToText.login_link_sent;
+	const text = reasonToText[reason] || reasonToText.signup_link_sent;
 
 	return (
 		<AuthLayout title="Check Your Email">
@@ -68,8 +66,8 @@ function LoginCheckEmailPage() {
 						<strong>Development Mode:</strong>
 					</p>
 					<p className="text-xs text-gray-400">
-						The login URL has been logged to the console. Check your server
-						console to see the login link.
+						The verification link has been logged to the console. Check your server
+						console to see the link.
 					</p>
 				</div>
 
