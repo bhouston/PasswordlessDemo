@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { setAuthCookie } from "@/lib/auth";
+import { clearAuthCookie, setAuthCookie } from "@/lib/auth";
 import { getEnvConfig } from "./env";
 import {
 	signLoginLinkToken,
@@ -16,8 +16,8 @@ import {
 	checkEmailRateLimit,
 	checkIPRateLimit,
 	hashJWT,
+	markAttemptAsBadEmail,
 	markAttemptSuccessful,
-	markLatestAttemptSuccessful,
 	RateLimitError,
 } from "./rateLimit";
 
@@ -27,12 +27,8 @@ const signupSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
 });
 
-const checkUserExistsSchema = z.object({
+const requestLoginLinkSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
-});
-
-const generateLoginLinkSchema = z.object({
-	userId: z.number().int().positive("User ID must be a positive integer"),
 });
 
 const verifySignupTokenSchema = z.object({
@@ -146,17 +142,19 @@ export const verifySignupTokenAndCreateUser = createServerFn({
 		}
 	});
 
+
 /**
- * Server function to check if user exists by email
+ * Server function to request login link by email
+ * Handles both existing and non-existing accounts to prevent enumeration
  * Rate limited by IP and email address
  */
-export const checkUserExists = createServerFn({ method: "POST" })
-	.inputValidator((data: unknown) => checkUserExistsSchema.parse(data))
+export const requestLoginLink = createServerFn({ method: "POST" })
+	.inputValidator((data: unknown) => requestLoginLinkSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
 			// Check rate limits (both IP and email)
-			await checkIPRateLimit("email-lookup");
-			await checkEmailRateLimit(data.email, "email-lookup");
+			await checkIPRateLimit("login-link");
+			await checkEmailRateLimit(data.email, "login-link");
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				throw new Error(error.message);
@@ -164,83 +162,60 @@ export const checkUserExists = createServerFn({ method: "POST" })
 			throw error;
 		}
 
-		const existingUser = await db
+		// Look up user by email
+		const [user] = await db
 			.select()
 			.from(users)
 			.where(eq(users.email, data.email))
 			.limit(1);
 
-		if (existingUser.length === 0) {
-			// User not found - attempt remains marked as "failed" (default)
-			throw new Error("No account found with this email address");
-		}
-
-		// User found - mark the attempts as successful
-		// Get IP address for marking IP-based attempt as successful
-		let clientIP = "unknown";
-		try {
-			clientIP = getRequestIP({ xForwardedFor: true }) ?? "unknown";
-		} catch {
-			// IP not available, use "unknown"
-		}
-		await markLatestAttemptSuccessful(clientIP, "ip", "email-lookup");
-		await markLatestAttemptSuccessful(
-			data.email.toLowerCase(),
-			"email",
-			"email-lookup",
-		);
-
-		return {
-			exists: true,
-			userId: existingUser[0].id,
-		};
-	});
-
-/**
- * Server function to generate login link token
- * Rate limited by IP and email address
- */
-export const generateLoginLink = createServerFn({ method: "POST" })
-	.inputValidator((data: unknown) => generateLoginLinkSchema.parse(data))
-	.handler(async ({ data }) => {
-		// Verify user exists
-		const user = await db
-			.select()
-			.from(users)
-			.where(eq(users.id, data.userId))
-			.limit(1);
-
-		if (user.length === 0) {
-			throw new Error("User not found");
-		}
-
-		// Generate JWT token first (we need it for the hash)
-		const token = await signLoginLinkToken(data.userId);
-		const tokenHash = hashJWT(token);
-
-		try {
-			// Check rate limits (both IP and email) with jwtHash
-			await checkIPRateLimit("login-link", tokenHash);
-			await checkEmailRateLimit(user[0].email, "login-link", tokenHash);
-		} catch (error) {
-			if (error instanceof RateLimitError) {
-				throw new Error(error.message);
-			}
-			throw error;
-		}
-
-		// Build verification URL
 		const env = getEnvConfig();
-		const loginUrl = `${env.BASE_URL}/login-via-link/${token}`;
 
-		// Log the URL to console (instead of sending email)
-		if (env.NODE_ENV === "development") {
-			console.log("\n=== Login Link ===");
-			console.log(`Email: ${user[0].email}`);
-			console.log(`Login URL: ${loginUrl}`);
-			console.log("==================\n");
+		if (user) {
+			// User exists - send login link email
+			const token = await signLoginLinkToken(user.id);
+			const tokenHash = hashJWT(token);
+			const loginUrl = `${env.BASE_URL}/login-via-link/${token}`;
+
+			// Mark attempt as successful
+			await markAttemptSuccessful(tokenHash, "login-link");
+
+			// Log the URL to console (instead of sending email)
+			if (env.NODE_ENV === "development") {
+				console.log("\n=== Login Link ===");
+				console.log(`Email: ${user.email}`);
+				console.log(`Login URL: ${loginUrl}`);
+				console.log("==================\n");
+			}
+		} else {
+			// User doesn't exist - send "account doesn't exist" email
+			const signupUrl = `${env.BASE_URL}/signup`;
+
+			// Mark attempt as bad-email
+			await markAttemptAsBadEmail(
+				getRequestIP({ xForwardedFor: true }) ?? "unknown",
+				"ip",
+				"login-link",
+			);
+			await markAttemptAsBadEmail(
+				data.email.toLowerCase(),
+				"email",
+				"login-link",
+			);
+
+			// Log the message to console (instead of sending email)
+			if (env.NODE_ENV === "development") {
+				console.log("\n=== Login Attempt - Account Not Found ===");
+				console.log(`Email: ${data.email}`);
+				console.log(
+					`Message: Someone tried to login to our platform using this email address, but this email isn't registered.`,
+				);
+				console.log(`If you want to create an account, please visit: ${signupUrl}`);
+				console.log("==========================================\n");
+			}
 		}
 
+		// Always return success (don't reveal account existence)
 		return { success: true };
 	});
 
@@ -292,3 +267,12 @@ export const verifyLoginLinkTokenAndAuthenticate = createServerFn({
 			};
 		}
 	});
+
+/**
+ * Server function to logout the current user
+ * Clears the authentication cookie
+ */
+export const logout = createServerFn({ method: "POST" }).handler(async () => {
+	clearAuthCookie();
+	return { success: true };
+});

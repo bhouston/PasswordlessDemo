@@ -5,6 +5,7 @@ import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
 import appCss from "../styles.css?url";
+import { Header } from "@/components/layout/Header";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -49,6 +50,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 					<HeadContent />
 				</head>
 				<body>
+					<Header />
 					{children}
 					<TanStackDevtools
 						config={{

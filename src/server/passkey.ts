@@ -15,7 +15,12 @@ import { db } from "@/db";
 import { passkeys, users } from "@/db/schema";
 import { setAuthCookie } from "@/lib/auth";
 import { getEnvConfig } from "./env";
-import { signPasskeyChallengeToken, verifyPasskeyChallengeToken } from "./jwt";
+import {
+	signPasskeyChallengeToken,
+	signPasskeyDiscoveryToken,
+	verifyPasskeyChallengeToken,
+	verifyPasskeyDiscoveryToken,
+} from "./jwt";
 import { requireUser } from "./middleware";
 import {
 	checkEmailRateLimit,
@@ -194,79 +199,31 @@ export const verifyRegistrationResponse = createServerFn({ method: "POST" })
 		}
 	});
 
-const initiatePasskeyLoginSchema = z.object({
-	email: z.string().email(),
-});
-
 /**
- * Server function to initiate passkey login by generating authentication options and JWT token
- * This replaces the old flow that stored challenges in the database
+ * Server function to initiate passkey discovery (no email/userId required)
+ * Uses WebAuthn discovery flow where user selects their passkey
  */
-export const initiatePasskeyLogin = createServerFn({ method: "POST" })
-	.inputValidator((data: unknown) => initiatePasskeyLoginSchema.parse(data))
-	.handler(async ({ data }) => {
-		// Fetch user by email
-		const [user] = await db
-			.select()
-			.from(users)
-			.where(eq(users.email, data.email))
-			.limit(1);
-
-		if (!user) {
-			return {
-				success: false,
-				error: "User not found",
-			};
-		}
-
-		// Check if user has a passkey
-		const userPasskey = await db
-			.select()
-			.from(passkeys)
-			.where(eq(passkeys.userId, user.id))
-			.limit(1);
-
-		if (userPasskey.length === 0) {
-			return {
-				success: false,
-				error: "No passkey found for this user",
-			};
-		}
-
-		const passkey = userPasskey[0];
-		const transports = passkey.transports
-			? (JSON.parse(passkey.transports) as string[])
-			: undefined;
-
+export const initiatePasskeyDiscovery = createServerFn({ method: "POST" })
+	.handler(async () => {
 		const env = getEnvConfig();
 		const opts: GenerateAuthenticationOptionsOpts = {
 			rpID: env.RP_ID,
 			timeout: 60000, // 60 seconds
-			allowCredentials: [
-				{
-					id: passkey.credentialId,
-					transports: transports as any,
-				},
-			],
+			// No allowCredentials array = discovery mode
 			userVerification: "required",
 		};
 
 		const options = await swaGenerateAuthenticationOptions(opts);
 
-		// Create JWT token with challenge and user identity
-		const token = await signPasskeyChallengeToken(
-			options.challenge,
-			user.id,
-			user.email,
-		);
+		// Create discovery token (challenge only, no userId)
+		const token = await signPasskeyDiscoveryToken(options.challenge);
 
 		// Hash token for rate limiting
 		const tokenHash = hashJWT(token);
 
 		try {
-			// Check rate limits (both IP and email) with jwtHash
+			// Check rate limits (IP only, no email)
 			await checkIPRateLimit("passkey-attempt", tokenHash);
-			await checkEmailRateLimit(data.email, "passkey-attempt", tokenHash);
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				return {
@@ -284,96 +241,6 @@ export const initiatePasskeyLogin = createServerFn({ method: "POST" })
 		};
 	});
 
-const getPasskeyAssertionOptionsSchema = z.object({
-	token: z.string().min(1),
-});
-
-/**
- * Server function to verify passkey challenge token and generate authentication options
- * Used in route loaders to prepare passkey authentication
- */
-export const getPasskeyAssertionOptions = createServerFn({ method: "GET" })
-	.inputValidator((data: unknown) =>
-		getPasskeyAssertionOptionsSchema.parse(data),
-	)
-	.handler(async ({ data }) => {
-		try {
-			// Verify token and extract challenge/user info
-			const tokenPayload = await verifyPasskeyChallengeToken(data.token);
-
-			// Fetch user by userId from token
-			const [user] = await db
-				.select()
-				.from(users)
-				.where(eq(users.id, tokenPayload.userId))
-				.limit(1);
-
-			if (!user) {
-				return {
-					success: false,
-					error: "User not found",
-					email: tokenPayload.email,
-				};
-			}
-
-			// Check if user has a passkey
-			const userPasskey = await db
-				.select()
-				.from(passkeys)
-				.where(eq(passkeys.userId, user.id))
-				.limit(1);
-
-			if (userPasskey.length === 0) {
-				return {
-					success: false,
-					error: "No passkey found for this user",
-					email: tokenPayload.email,
-				};
-			}
-
-			const passkey = userPasskey[0];
-			const transports = passkey.transports
-				? (JSON.parse(passkey.transports) as string[])
-				: undefined;
-
-			// Generate authentication options
-			const env = getEnvConfig();
-			const opts: GenerateAuthenticationOptionsOpts = {
-				rpID: env.RP_ID,
-				timeout: 60000, // 60 seconds
-				allowCredentials: [
-					{
-						id: passkey.credentialId,
-						transports: transports as any,
-					},
-				],
-				userVerification: "required",
-			};
-
-			// Generate options (this will create a new challenge, but we'll replace it)
-			const options = await swaGenerateAuthenticationOptions(opts);
-
-			// Replace challenge with the one from token
-			const optionsWithTokenChallenge = {
-				...options,
-				challenge: tokenPayload.challenge,
-			};
-
-			return {
-				success: true,
-				user,
-				options: optionsWithTokenChallenge,
-				token: data.token,
-			};
-		} catch (error) {
-			return {
-				success: false,
-				error:
-					error instanceof Error ? error.message : "Token verification failed",
-			};
-		}
-	});
-
 const verifyAuthenticationResponseSchema = z.object({
 	response: z.unknown(),
 	token: z.string().min(1),
@@ -382,7 +249,7 @@ const verifyAuthenticationResponseSchema = z.object({
 /**
  * Server function to verify authentication response and update counter
  * Also sets authentication cookie on success
- * Now uses JWT token to extract challenge instead of database
+ * Supports both discovery mode (no userId in token) and regular mode (userId in token)
  */
 export const verifyAuthenticationResponse = createServerFn({ method: "POST" })
 	.inputValidator((data: unknown) =>
@@ -390,26 +257,70 @@ export const verifyAuthenticationResponse = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		try {
-			// Verify token and extract challenge
-			const tokenPayload = await verifyPasskeyChallengeToken(data.token);
-			const expectedChallenge = tokenPayload.challenge;
-			const userId = tokenPayload.userId;
+			// Try to verify as discovery token first (challenge only)
+			let isDiscovery = false;
+			let expectedChallenge: string;
+			let userId: number | undefined;
 
-			// Fetch user's passkey
-			const userPasskey = await db
-				.select()
-				.from(passkeys)
-				.where(eq(passkeys.userId, userId))
-				.limit(1);
-
-			if (userPasskey.length === 0) {
-				return {
-					success: false,
-					error: "Passkey not found",
-				};
+			try {
+				const discoveryPayload = await verifyPasskeyDiscoveryToken(data.token);
+				isDiscovery = true;
+				expectedChallenge = discoveryPayload.challenge;
+			} catch {
+				// Not a discovery token, try regular token
+				const tokenPayload = await verifyPasskeyChallengeToken(data.token);
+				expectedChallenge = tokenPayload.challenge;
+				userId = tokenPayload.userId;
 			}
 
-			const passkey = userPasskey[0];
+			let passkey;
+			if (isDiscovery) {
+				// Discovery mode: extract credentialId from response and look up user
+				const response = data.response as any;
+				const credentialId = response.id;
+
+				// Find passkey by credentialId
+				const passkeysFound = await db
+					.select()
+					.from(passkeys)
+					.where(eq(passkeys.credentialId, credentialId))
+					.limit(1);
+
+				if (passkeysFound.length === 0) {
+					return {
+						success: false,
+						error: "Passkey not found",
+					};
+				}
+
+				passkey = passkeysFound[0];
+				userId = passkey.userId;
+			} else {
+				// Regular mode: use userId from token
+				if (!userId) {
+					return {
+						success: false,
+						error: "Invalid token",
+					};
+				}
+
+				// Fetch user's passkey
+				const userPasskey = await db
+					.select()
+					.from(passkeys)
+					.where(eq(passkeys.userId, userId))
+					.limit(1);
+
+				if (userPasskey.length === 0) {
+					return {
+						success: false,
+						error: "Passkey not found",
+					};
+				}
+
+				passkey = userPasskey[0];
+			}
+
 			// Convert base64url back to Uint8Array
 			const publicKeyBuffer = Buffer.from(passkey.publicKey, "base64url");
 			const publicKey = new Uint8Array(
@@ -463,6 +374,13 @@ export const verifyAuthenticationResponse = createServerFn({ method: "POST" })
 			await markAttemptSuccessful(tokenHash, "passkey-attempt");
 
 			// Set authentication cookie on successful verification
+			if (!userId) {
+				return {
+					success: false,
+					error: "User ID not found",
+				};
+			}
+
 			setAuthCookie(userId);
 
 			return { success: true };

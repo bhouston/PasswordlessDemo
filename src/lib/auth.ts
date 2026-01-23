@@ -1,4 +1,4 @@
-import { getCookie, setCookie } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
 
 /**
  * Cookie name for user authentication
@@ -30,4 +30,15 @@ export function setAuthCookie(userId: number): void {
  */
 export function getAuthCookie(): string | undefined {
 	return getCookie(AUTH_COOKIE_NAME);
+}
+
+/**
+ * Clears the authentication cookie
+ */
+export function clearAuthCookie(): void {
+	deleteCookie(AUTH_COOKIE_NAME, {
+		path: "/",
+		sameSite: "lax",
+		secure: process.env.NODE_ENV === "production",
+	});
 }

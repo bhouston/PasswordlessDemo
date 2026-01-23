@@ -25,13 +25,12 @@
 - **Recovery**: Losing the device often means getting locked out.
 
 ### 1.4 The Ideal User Flow
-1. **Identification**: User enters email.
-2. **Recognition**: System checks if user exists.
-3. **Primary Auth (Fast)**: If recognized device -> Prompt for Passkey (FaceID/TouchID).
-4. **Fallback Auth (Reliable)**: If new device -> Send Magic Link to email.
-- **Benefits**: No secrets to remember. Phishing resistant. Seamless experience.
+1. **Primary Auth (Fast)**: Passkey discovery mode - User's device automatically discovers their account via biometrics (FaceID/TouchID). No email input required.
+2. **Fallback Auth (Reliable)**: If passkey unavailable -> User requests Magic Link via email.
+3. **Email Flow**: Always succeeds - sends login link if account exists, or notification email if account doesn't exist.
+- **Benefits**: No secrets to remember. Phishing resistant. Seamless experience. **No account enumeration** - attackers can't discover which emails are registered.
 
-> **Speaker Note:** "Before we get to the fancy bio-metrics, we need a bedrock. Email is that bedrock. A 'Magic Link' is just a password that changes every time and is delivered to a device you already unlocked (your phone/laptop)."
+> **Speaker Note:** "Before we get to the fancy bio-metrics, we need a bedrock. Email is that bedrock. A 'Magic Link' is just a password that changes every time and is delivered to a device you already unlocked (your phone/laptop). But notice: with passkeys in discovery mode, users don't even need to type their email - the passkey itself identifies the account. This is both simpler and more secure."
 
 ---
 
@@ -169,10 +168,27 @@ export async function verifyRegistrationResponse(...) {
 
 > **Speaker Note:** "If you take one thing away from this talk: **Rate Limit your email endpoints.** If you don't, you are building a free weapon for spammers."
 
-### 4.2 Account Enumeration
-- **Problem**: Telling an attacker "Email not found" reveals who *is* a customer.
-- **Solution**: Always say "If an account exists, we sent a link." (Though this degrades UX for legitimate users who made a typo).
-- **Compromise**: In this demo, we prioritize UX, but in high-security contexts, use vague messages.
+### 4.2 Account Enumeration Prevention
+
+**Why prevent account enumeration?**
+- **Privacy**: Attackers can't discover which emails are registered users.
+- **Targeting**: Prevents attackers from building lists of valid accounts for targeted attacks.
+- **Reconnaissance**: Stops attackers from mapping your user base before launching attacks.
+
+**How we prevent it:**
+
+1. **Passkeys (Discovery Mode)**: 
+   - Users never enter their email - the passkey itself discovers the account.
+   - No email input = no opportunity for enumeration.
+   - The browser's WebAuthn API handles account discovery securely.
+
+2. **Email Login (Always Succeeds)**:
+   - The request always returns success, regardless of whether the account exists.
+   - If account exists → Send login link email.
+   - If account doesn't exist → Send notification email explaining someone tried to log in and that email isn't registered.
+   - **Why it's safe to say "account doesn't exist"**: The email goes to the owner of that email address. They already know whether they have an account, so revealing this information doesn't help attackers.
+
+> **Speaker Note:** "This is both simpler and more secure. Passkeys eliminate the enumeration attack vector entirely, and our email flow always succeeds - we just send different emails. The key insight is that when an account doesn't exist, we're telling the email owner something they already know, so there's no security risk."
 
 ### 4.3 Signups
 - **Verification First**: Never create a `User` record until email ownership is proven.

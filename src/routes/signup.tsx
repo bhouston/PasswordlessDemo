@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { signup } from "@/server/auth";
+import { getUserWithPasskey } from "@/server/user";
 
 // Zod schema for form validation
 const signupSchema = z.object({
@@ -21,6 +22,22 @@ const signupSchema = z.object({
 });
 
 export const Route = createFileRoute("/signup")({
+	beforeLoad: async () => {
+		// Check if user is already logged in
+		try {
+			await getUserWithPasskey({});
+			// User is logged in, redirect to user settings
+			throw redirect({
+				to: "/user-settings",
+			});
+		} catch (error) {
+			// If it's a redirect, re-throw it
+			if (error && typeof error === "object" && "to" in error) {
+				throw error;
+			}
+			// Otherwise, user is not logged in, continue to signup page
+		}
+	},
 	component: SignupPage,
 });
 

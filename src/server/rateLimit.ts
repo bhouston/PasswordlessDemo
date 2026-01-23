@@ -85,6 +85,7 @@ async function cleanupOldRecords(endpoint: EndpointType) {
  * @param type - 'ip' or 'email'
  * @param endpoint - endpoint type
  * @param jwtHash - Optional hash of JWT token to identify this attempt
+ * @param initialStatus - Optional initial status (defaults to "failed")
  * @throws RateLimitError if rate limit exceeded
  */
 export async function checkRateLimit(
@@ -92,6 +93,7 @@ export async function checkRateLimit(
 	type: "ip" | "email",
 	endpoint: EndpointType,
 	jwtHash?: string,
+	initialStatus: "failed" | "bad-email" = "failed",
 ): Promise<void> {
 	const config = RATE_LIMIT_CONFIG[endpoint];
 	const now = new Date();
@@ -138,13 +140,13 @@ export async function checkRateLimit(
 		}
 	}
 
-	// Create new attempt record (marked as failed by default)
+	// Create new attempt record (marked with initial status)
 	await db.insert(rateLimits).values({
 		identifier,
 		type,
 		endpoint,
 		jwtHash: jwtHash || null,
-		status: "failed",
+		status: initialStatus,
 		count: 1,
 		windowStart: now,
 	});
@@ -234,6 +236,45 @@ export async function checkEmailRateLimit(
 	jwtHash?: string,
 ): Promise<void> {
 	await checkRateLimit(email.toLowerCase(), "email", endpoint, jwtHash);
+}
+
+/**
+ * Mark a rate limit attempt as bad email for an identifier
+ * Used for tracking login attempts with non-existent emails
+ * @param identifier - IP address or email
+ * @param type - 'ip' or 'email'
+ * @param endpoint - endpoint type
+ */
+export async function markAttemptAsBadEmail(
+	identifier: string,
+	type: "ip" | "email",
+	endpoint: EndpointType,
+): Promise<void> {
+	const now = new Date();
+	const config = RATE_LIMIT_CONFIG[endpoint];
+	const windowStart = new Date(now.getTime() - config.windowMs);
+
+	// Find the most recent attempt for this identifier
+	const recentAttempts = await db
+		.select()
+		.from(rateLimits)
+		.where(
+			and(
+				eq(rateLimits.identifier, identifier),
+				eq(rateLimits.type, type),
+				eq(rateLimits.endpoint, endpoint),
+				gte(rateLimits.windowStart, windowStart),
+			),
+		)
+		.orderBy(desc(rateLimits.createdAt))
+		.limit(1);
+
+	if (recentAttempts.length > 0) {
+		await db
+			.update(rateLimits)
+			.set({ status: "bad-email" })
+			.where(eq(rateLimits.id, recentAttempts[0].id));
+	}
 }
 
 /**

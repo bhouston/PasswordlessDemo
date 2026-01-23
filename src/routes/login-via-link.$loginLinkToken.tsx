@@ -1,113 +1,82 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { InvalidLink } from "@/components/auth/InvalidLink";
+import { AuthLayout } from "@/components/layout/AuthLayout";
+import { redirectToSchema } from "@/lib/schemas";
 import { verifyLoginLinkTokenAndAuthenticate } from "@/server/auth";
 
 export const Route = createFileRoute("/login-via-link/$loginLinkToken")({
+	validateSearch: redirectToSchema,
 	beforeLoad: async ({ params }) => {
-		// Verify token and authenticate user in beforeLoad
-		// This ensures user is authenticated before route loads
-		return await verifyLoginLinkTokenAndAuthenticate({
-			data: { token: params.loginLinkToken },
-		});
+		try {
+			// Call the server function to validate token and perform login
+			// This will set the session cookie if successful
+			const result = await verifyLoginLinkTokenAndAuthenticate({
+				data: { token: params.loginLinkToken },
+			});
+
+			if (!result.success) {
+				return { loginSuccess: false, error: result.error };
+			}
+
+			return { loginSuccess: true };
+		} catch (error) {
+			// Login failed - return failure status
+			const errorMessage =
+				error instanceof Error
+					? error.message
+					: "Login failed. The link may be invalid or expired.";
+			return { loginSuccess: false, error: errorMessage };
+		}
 	},
-	loader: async ({ context }) => {
-		return context;
-	},
+	loader: async ({ context: { loginSuccess, error } }) => ({
+		loginSuccess,
+		error,
+	}),
 	component: LoginViaLinkPage,
 });
 
 function LoginViaLinkPage() {
+	const { loginSuccess, error } = Route.useLoaderData();
+	const { redirectTo = "/" } = Route.useSearch();
 	const router = useRouter();
-	const result = Route.useLoaderData();
+	const navigate = useNavigate();
+
+	// Redirect to redirectTo (or home) if login was successful
+	useEffect(() => {
+		if (loginSuccess) {
+			let cancelled = false;
+			void (async () => {
+				await router.invalidate();
+				if (!cancelled) {
+					await navigate({ to: redirectTo, reloadDocument: true });
+				}
+			})();
+			return () => {
+				cancelled = true;
+			};
+		}
+	}, [loginSuccess, router, navigate, redirectTo]);
+
+	if (!loginSuccess) {
+		return (
+			<InvalidLink
+				message={
+					error ||
+					"This login link is invalid, has already been used, or has expired. Please request a new link."
+				}
+				title="Invalid Login Link"
+			/>
+		);
+	}
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-			<div className="w-full max-w-md">
-				<FieldSet className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
-					<FieldGroup>
-						{result.success ? (
-							<div className="text-center">
-								<div className="mb-6">
-									<div className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-										<svg
-											className="w-8 h-8 text-green-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M5 13l4 4L19 7"
-											/>
-										</svg>
-									</div>
-									<h1 className="text-3xl font-bold text-white mb-2">
-										Login Successful
-									</h1>
-									<p className="text-gray-400">
-										You have been successfully logged in!
-									</p>
-									{result.user && (
-										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
-											<p className="text-sm text-gray-300">
-												<strong>Email:</strong> {result.user.email}
-											</p>
-										</div>
-									)}
-								</div>
-								<Field>
-									<Button
-										onClick={async () => await router.navigate({ to: "/" })}
-										className="w-full"
-									>
-										Go to Home
-									</Button>
-								</Field>
-							</div>
-						) : (
-							<div className="text-center">
-								<div className="mb-6">
-									<div className="mx-auto w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
-										<svg
-											className="w-8 h-8 text-red-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M6 18L18 6M6 6l12 12"
-											/>
-										</svg>
-									</div>
-									<h1 className="text-3xl font-bold text-white mb-2">
-										Login Failed
-									</h1>
-									<FieldError className="mt-4">
-										{result.error ||
-											"The login link is invalid or has expired. Please request a new login link."}
-									</FieldError>
-								</div>
-								<Field>
-									<Button
-										onClick={async () =>
-											await router.navigate({ to: "/login" })
-										}
-										className="w-full"
-									>
-										Try Again
-									</Button>
-								</Field>
-							</div>
-						)}
-					</FieldGroup>
-				</FieldSet>
+		<AuthLayout title="Signing In...">
+			<div className="space-y-4">
+				<p className="text-center text-gray-400">
+					Please wait while we sign you in...
+				</p>
 			</div>
-		</div>
+		</AuthLayout>
 	);
 }
