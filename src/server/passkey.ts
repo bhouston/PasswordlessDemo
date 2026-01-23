@@ -381,7 +381,7 @@ export const verifyAuthenticationResponse = createServerFn({ method: "POST" })
 				};
 			}
 
-			setAuthCookie(userId);
+			await setAuthCookie(userId);
 
 			return { success: true };
 		} catch (error) {

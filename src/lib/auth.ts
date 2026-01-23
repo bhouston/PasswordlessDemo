@@ -1,4 +1,5 @@
 import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
+import { signSessionToken, verifySessionToken } from "@/server/jwt";
 
 /**
  * Cookie name for user authentication
@@ -17,19 +18,31 @@ const AUTH_COOKIE_OPTIONS = {
 };
 
 /**
- * Sets the authentication cookie with the user ID
+ * Sets the authentication cookie with a signed session token
  * @param userId - User's ID to store in the cookie
  */
-export function setAuthCookie(userId: number): void {
-	setCookie(AUTH_COOKIE_NAME, userId.toString(), AUTH_COOKIE_OPTIONS);
+export async function setAuthCookie(userId: number): Promise<void> {
+	const token = await signSessionToken(userId);
+	setCookie(AUTH_COOKIE_NAME, token, AUTH_COOKIE_OPTIONS);
 }
 
 /**
- * Gets the authentication cookie (user ID)
- * @returns User ID as string if cookie exists, undefined otherwise
+ * Gets the authentication cookie and verifies the signed session token
+ * @returns User ID as string if cookie exists and token is valid, undefined otherwise
  */
-export function getAuthCookie(): string | undefined {
-	return getCookie(AUTH_COOKIE_NAME);
+export async function getAuthCookie(): Promise<string | undefined> {
+	const token = getCookie(AUTH_COOKIE_NAME);
+	if (!token) {
+		return undefined;
+	}
+
+	try {
+		const payload = await verifySessionToken(token);
+		return payload.userId.toString();
+	} catch {
+		// Invalid, expired, or tampered token - return undefined
+		return undefined;
+	}
 }
 
 /**

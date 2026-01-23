@@ -127,7 +127,7 @@ export const verifySignupTokenAndCreateUser = createServerFn({
 				.returning();
 
 			// Set authentication cookie
-			setAuthCookie(newUser.id);
+			await setAuthCookie(newUser.id);
 
 			return {
 				success: true,
@@ -298,7 +298,7 @@ export const verifyLoginCodeAndAuthenticate = createServerFn({
 				await markAttemptSuccessful(tokenHash, "login-code");
 
 				// Set authentication cookie
-				setAuthCookie(payload.userId);
+				await setAuthCookie(payload.userId);
 
 				return {
 					success: true,

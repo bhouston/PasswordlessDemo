@@ -5,6 +5,7 @@ import { getEnvConfig } from "./env";
 const SIGNUP_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
 const CODE_VERIFICATION_TOKEN_EXPIRATION = 15 * 60; // 15 minutes
 const PASSKEY_CHALLENGE_TOKEN_EXPIRATION = 10 * 60; // 10 minutes
+const SESSION_TOKEN_EXPIRATION = 60 * 60 * 24 * 30; // 30 days
 
 /**
  * Signup token payload
@@ -43,6 +44,15 @@ export interface PasskeyChallengeTokenPayload {
  */
 export interface PasskeyDiscoveryTokenPayload {
 	challenge: string;
+	iat: number;
+	exp: number;
+}
+
+/**
+ * Session token payload (for authenticated sessions)
+ */
+export interface SessionTokenPayload {
+	userId: number;
 	iat: number;
 	exp: number;
 }
@@ -294,6 +304,59 @@ export async function verifyPasskeyDiscoveryToken(
 
 		return {
 			challenge: payload.challenge,
+			iat: payload.iat as number,
+			exp: payload.exp as number,
+		};
+	} catch (error) {
+		if (error instanceof Error) {
+			throw new Error(`Token verification failed: ${error.message}`);
+		}
+		throw new Error("Token verification failed: Unknown error");
+	}
+}
+
+/**
+ * Creates a JWT token for authenticated user sessions
+ * @param userId - User's ID
+ * @returns Signed JWT token string
+ */
+export async function signSessionToken(userId: number): Promise<string> {
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
+	const now = Math.floor(Date.now() / 1000);
+
+	const token = await new SignJWT({ userId })
+		.setProtectedHeader({ alg: "HS256" })
+		.setIssuedAt(now)
+		.setExpirationTime(now + SESSION_TOKEN_EXPIRATION)
+		.sign(secret);
+
+	return token;
+}
+
+/**
+ * Verifies and extracts payload from a session token
+ * @param token - JWT token string
+ * @returns Token payload if valid, throws error if invalid/expired
+ */
+export async function verifySessionToken(
+	token: string,
+): Promise<SessionTokenPayload> {
+	const env = getEnvConfig();
+	const secret = new TextEncoder().encode(env.JWT_SECRET);
+
+	try {
+		const { payload } = await jwtVerify(token, secret, {
+			algorithms: ["HS256"],
+		});
+
+		// Validate payload structure
+		if (typeof payload.userId !== "number") {
+			throw new Error("Invalid token payload structure");
+		}
+
+		return {
+			userId: payload.userId,
 			iat: payload.iat as number,
 			exp: payload.exp as number,
 		};

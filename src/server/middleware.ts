@@ -11,7 +11,7 @@ import { getAuthCookie } from "@/lib/auth";
  */
 export const requireUser = createMiddleware({ type: "function" }).server(
 	async ({ next }) => {
-		const userIdStr = getAuthCookie();
+		const userIdStr = await getAuthCookie();
 		if (!userIdStr) {
 			throw new Error("Not authenticated");
 		}

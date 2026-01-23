@@ -99,10 +99,6 @@ export async function checkRateLimit(
 	const now = new Date();
 	const windowStart = new Date(now.getTime() - config.windowMs);
 
-	// Clean up old records periodically (simple approach - could be optimized)
-	// In production, you might want to run this as a background job
-	await cleanupOldRecords(endpoint);
-
 	// Count all attempts (failed + successful) for this identifier
 	// We count all attempts, not just successful ones
 	const allAttempts = await db
