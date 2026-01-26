@@ -55,13 +55,13 @@ function LoginViaCodePage() {
 	const [formError, setFormError] = useState<string>();
 	const verifyCodeFn = useServerFn(verifyLoginCodeAndAuthenticate);
 
-	const verifyCodeMutation = useToastMutation({
+		const verifyCodeMutation = useToastMutation({
 		action: "Verify login code",
 		mutationFn: async (variables: { code: string }) => {
 			const result = await verifyCodeFn({
 				data: {
 					token: codeVerificationToken,
-					code: variables.code,
+					code: variables.code.toUpperCase(),
 				},
 			});
 			return result;
@@ -83,11 +83,11 @@ function LoginViaCodePage() {
 		},
 		validators: {
 			onChange: z.object({
-				code: z.string().length(6, "Code must be 6 digits"),
+				code: z.string().length(8, "Code must be 8 characters").regex(/^[A-Z0-9]{8}$/, "Code must be alphanumeric (A-Z, 0-9)"),
 			}),
 		},
 		onSubmit: async ({ value }) => {
-			await verifyCodeMutation.mutateAsync(value);
+			await verifyCodeMutation.mutateAsync({ code: value.code.toUpperCase() });
 		},
 	});
 
@@ -117,12 +117,12 @@ function LoginViaCodePage() {
 						{(field) => (
 							<Field data-invalid={field.state.meta.errors.length > 0}>
 								<FieldLabel htmlFor={field.name}>
-									Enter the 6-digit code sent to your email
+									Enter the 8-character code sent to your email
 								</FieldLabel>
 								<InputOTP
-									maxLength={6}
-									value={field.state.value}
-									onChange={(value) => field.handleChange(value)}
+									maxLength={8}
+									value={field.state.value.toUpperCase()}
+									onChange={(value) => field.handleChange(value.toUpperCase())}
 									disabled={verifyCodeMutation.isPending}
 								>
 									<InputOTPGroup>
@@ -132,6 +132,8 @@ function LoginViaCodePage() {
 										<InputOTPSlot index={3} />
 										<InputOTPSlot index={4} />
 										<InputOTPSlot index={5} />
+										<InputOTPSlot index={6} />
+										<InputOTPSlot index={7} />
 									</InputOTPGroup>
 								</InputOTP>
 								{field.state.meta.errors.length > 0 && (

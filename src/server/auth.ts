@@ -1,17 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestIP } from "@tanstack/react-start/server";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, userAuthAttempts } from "@/db/schema";
 import { clearAuthCookie, setAuthCookie } from "@/lib/auth";
 import { getEnvConfig } from "./env";
 import {
 	signCodeVerificationToken,
-	signSignupToken,
 	verifyCodeVerificationToken,
-	verifySignupToken,
 } from "./jwt";
 import {
 	checkEmailRateLimit,
@@ -32,27 +30,50 @@ const requestLoginCodeSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
 });
 
-const verifySignupTokenSchema = z.object({
-	token: z.string().min(1, "Token is required"),
-});
-
 const verifyLoginCodeSchema = z.object({
 	token: z.string().min(1, "Token is required"),
-	code: z.string().length(6, "Code must be 6 digits"),
+	code: z.string().length(8, "Code must be 8 characters").regex(/^[A-Z0-9]{8}$/, "Code must be alphanumeric (A-Z, 0-9)"),
+});
+
+const verifySignupCodeSchema = z.object({
+	token: z.string().min(1, "Token is required"),
+	code: z.string().length(8, "Code must be 8 characters").regex(/^[A-Z0-9]{8}$/, "Code must be alphanumeric (A-Z, 0-9)"),
 });
 
 /**
- * Server function to handle signup
- * Checks if email already exists and generates signup token
+ * Generate an 8-character alphanumeric OTP code (A-Z, 0-9)
+ * @returns 8-character alphanumeric code as string
+ */
+function generateOTPCode(): string {
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	let code = "";
+	for (let i = 0; i < 8; i++) {
+		code += chars.charAt(Math.floor(Math.random() * chars.length));
+	}
+	return code;
+}
+
+/**
+ * Hash an OTP code using SHA-256
+ * @param code - OTP code to hash
+ * @returns Hashed code as hex string
+ */
+function hashOTPCode(code: string): string {
+	return createHash("sha256").update(code.toUpperCase()).digest("hex");
+}
+
+/**
+ * Server function to request signup OTP code
+ * Checks if email already exists and generates OTP code
  * Rate limited by IP and email address
  */
-export const signup = createServerFn({ method: "POST" })
+export const requestSignupOTP = createServerFn({ method: "POST" })
 	.inputValidator((data: unknown) => signupSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
 			// Check rate limits (both IP and email)
-			await checkIPRateLimit("signup");
-			await checkEmailRateLimit(data.email, "signup");
+			await checkIPRateLimit("signup-otp");
+			await checkEmailRateLimit(data.email, "signup-otp");
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				throw new Error(error.message);
@@ -71,43 +92,119 @@ export const signup = createServerFn({ method: "POST" })
 			throw new Error("An account with this email already exists");
 		}
 
-		// Generate JWT token
-		const token = await signSignupToken(data.name, data.email);
+		// Generate OTP code
+		const code = generateOTPCode();
+		const codeHash = hashOTPCode(code);
 
-		// Build verification URL
+		// Calculate expiration time (15 minutes from now)
+		const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+		// Create userAuthAttempts record
+		const [attempt] = await db
+			.insert(userAuthAttempts)
+			.values({
+				email: data.email,
+				name: data.name,
+				userId: null,
+				codeHash,
+				purpose: "signup",
+				expiresAt,
+				used: false,
+			})
+			.returning();
+
+		// Sign JWT token with userAuthAttemptId
+		const token = await signCodeVerificationToken(null, data.email, attempt.id);
+		const tokenHash = hashJWT(token);
+
+		// Mark attempt as successful
+		await markAttemptSuccessful(tokenHash, "signup-otp");
+
+		// Log the code to console (instead of sending email)
 		const env = getEnvConfig();
-		const verificationUrl = `${env.BASE_URL}/signup/${token}`;
-
-		// Log the URL to console (instead of sending email)
 		if (env.NODE_ENV === "development") {
-			console.log("\n=== Signup Verification Link ===");
+			console.log("\n=== Signup OTP Code ===");
 			console.log(`Name: ${data.name}`);
 			console.log(`Email: ${data.email}`);
-			console.log(`Verification URL: ${verificationUrl}`);
-			console.log("================================\n");
+			console.log(`Code: ${code}`);
+			console.log("=======================\n");
 		}
 
-		return { success: true };
+		return { success: true, token };
 	});
 
 /**
- * Server function to verify signup token and create user
- * Used in beforeLoad to ensure user is created before route loads
+ * Server function to verify signup OTP code and create user
+ * Used to verify the OTP code entered by the user
  */
-export const verifySignupTokenAndCreateUser = createServerFn({
+export const verifySignupOTPAndCreateUser = createServerFn({
 	method: "POST",
 })
-	.inputValidator((data: unknown) => verifySignupTokenSchema.parse(data))
+	.inputValidator((data: unknown) => verifySignupCodeSchema.parse(data))
 	.handler(async ({ data }) => {
 		try {
 			// Verify the token
-			const payload = await verifySignupToken(data.token);
+			const payload = await verifyCodeVerificationToken(data.token);
 
-			// Check if user already exists
+			// Look up userAuthAttempts record
+			const [attempt] = await db
+				.select()
+				.from(userAuthAttempts)
+				.where(eq(userAuthAttempts.id, payload.userAuthAttemptId))
+				.limit(1);
+
+			if (!attempt) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			// Validate attempt
+			if (attempt.used) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (new Date(attempt.expiresAt) < new Date()) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (attempt.purpose !== "signup") {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (attempt.email !== payload.email) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			// Hash the submitted code
+			const submittedCodeHash = hashOTPCode(data.code.toUpperCase());
+
+			// Compare hashes
+			if (attempt.codeHash !== submittedCodeHash) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			// Check if user already exists (race condition protection)
 			const existingUser = await db
 				.select()
 				.from(users)
-				.where(eq(users.email, payload.email))
+				.where(eq(users.email, attempt.email))
 				.limit(1);
 
 			if (existingUser.length > 0) {
@@ -117,12 +214,26 @@ export const verifySignupTokenAndCreateUser = createServerFn({
 				};
 			}
 
+			// Mark attempt as used
+			await db
+				.update(userAuthAttempts)
+				.set({ used: true })
+				.where(eq(userAuthAttempts.id, attempt.id));
+
+			// Get name from attempt (stored during signup request)
+			if (!attempt.name) {
+				return {
+					success: false,
+					error: "Invalid signup attempt. Please start over.",
+				};
+			}
+
 			// Create the user
 			const [newUser] = await db
 				.insert(users)
 				.values({
-					name: payload.name,
-					email: payload.email,
+					name: attempt.name,
+					email: attempt.email,
 				})
 				.returning();
 
@@ -139,36 +250,12 @@ export const verifySignupTokenAndCreateUser = createServerFn({
 				error:
 					error instanceof Error
 						? error.message
-						: "Signup failed. The link may be invalid or expired.",
+						: "Signup failed. The code may be invalid or expired.",
 			};
 		}
 	});
 
 
-/**
- * Generate a 6-digit OTP code
- * @returns 6-digit numeric code as string
- */
-function generateOTPCode(): string {
-	return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-/**
- * Hash an OTP code using SHA-256
- * @param code - OTP code to hash
- * @returns Hashed code as hex string
- */
-function hashOTPCode(code: string): string {
-	return createHash("sha256").update(code).digest("hex");
-}
-
-/**
- * Generate a random code hash for non-existent accounts (to prevent information leak)
- * @returns Random hash string
- */
-function generateRandomCodeHash(): string {
-	return createHash("sha256").update(randomBytes(32)).digest("hex");
-}
 
 /**
  * Server function to request login code by email
@@ -198,33 +285,47 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
 		const env = getEnvConfig();
 
+		// Generate OTP code (always, to prevent timing attacks)
+		const code = generateOTPCode();
+		const codeHash = hashOTPCode(code);
+
+		// Calculate expiration time (15 minutes from now)
+		const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+		// Create userAuthAttempts record
+		const [attempt] = await db
+			.insert(userAuthAttempts)
+			.values({
+				email: data.email,
+				userId: user?.id ?? null,
+				codeHash,
+				purpose: "login",
+				expiresAt,
+				used: false,
+			})
+			.returning();
+
+		// Sign JWT token with userAuthAttemptId
+		const token = await signCodeVerificationToken(
+			user?.id ?? null,
+			data.email,
+			attempt.id,
+		);
+		const tokenHash = hashJWT(token);
+
+		// Mark attempt as successful
+		await markAttemptSuccessful(tokenHash, "login-code");
+
 		if (user) {
-			// User exists - generate OTP and send code email
-			const code = generateOTPCode();
-			const codeHash = hashOTPCode(code);
-			const token = await signCodeVerificationToken(user.id, data.email, codeHash);
-			const tokenHash = hashJWT(token);
-
-			// Mark attempt as successful
-			await markAttemptSuccessful(tokenHash, "login-code");
-
-			// Log the code to console (instead of sending email)
+			// User exists - log the code to console (instead of sending email)
 			if (env.NODE_ENV === "development") {
 				console.log("\n=== Login Code ===");
 				console.log(`Email: ${user.email}`);
 				console.log(`Code: ${code}`);
 				console.log("==================\n");
 			}
-
-			// Always return token to prevent enumeration
-			return { success: true, token };
 		} else {
-			// User doesn't exist - generate random codeHash and send "account doesn't exist" email
-			const randomCodeHash = generateRandomCodeHash();
-			const token = await signCodeVerificationToken(null, data.email, randomCodeHash);
-			const signupUrl = `${env.BASE_URL}/signup`;
-
-			// Mark attempt as bad-email
+			// User doesn't exist - mark attempt as bad-email
 			await markAttemptAsBadEmail(
 				getRequestIP({ xForwardedFor: true }) ?? "unknown",
 				"ip",
@@ -238,6 +339,7 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 
 			// Log the message to console (instead of sending email)
 			if (env.NODE_ENV === "development") {
+				const signupUrl = `${env.BASE_URL}/signup`;
 				console.log("\n=== Login Attempt - Account Not Found ===");
 				console.log(`Email: ${data.email}`);
 				console.log(
@@ -246,10 +348,10 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 				console.log(`If you want to create an account, please visit: ${signupUrl}`);
 				console.log("==========================================\n");
 			}
-
-			// Always return token to prevent enumeration
-			return { success: true, token };
 		}
+
+		// Always return token to prevent enumeration
+		return { success: true, token };
 	});
 
 /**
@@ -265,11 +367,62 @@ export const verifyLoginCodeAndAuthenticate = createServerFn({
 			// Verify the token
 			const payload = await verifyCodeVerificationToken(data.token);
 
+			// Look up userAuthAttempts record
+			const [attempt] = await db
+				.select()
+				.from(userAuthAttempts)
+				.where(eq(userAuthAttempts.id, payload.userAuthAttemptId))
+				.limit(1);
+
+			if (!attempt) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			// Validate attempt
+			if (attempt.used) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (new Date(attempt.expiresAt) < new Date()) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (attempt.purpose !== "login") {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			// Verify email matches (if provided in JWT)
+			if (payload.email && attempt.email !== payload.email) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
+			if (payload.userId && attempt.userId !== payload.userId) {
+				return {
+					success: false,
+					error: "Invalid code. Please check your email and try again.",
+				};
+			}
+
 			// Hash the submitted code
-			const submittedCodeHash = hashOTPCode(data.code);
+			const submittedCodeHash = hashOTPCode(data.code.toUpperCase());
 
 			// Compare hashes
-			if (payload.codeHash !== submittedCodeHash) {
+			if (attempt.codeHash !== submittedCodeHash) {
 				// Generic error - don't reveal if account exists or code was wrong
 				return {
 					success: false,
@@ -278,12 +431,12 @@ export const verifyLoginCodeAndAuthenticate = createServerFn({
 			}
 
 			// If userId exists and code matches, authenticate user
-			if (payload.userId) {
+			if (attempt.userId) {
 				// Verify user exists in database
 				const user = await db
 					.select()
 					.from(users)
-					.where(eq(users.id, payload.userId))
+					.where(eq(users.id, attempt.userId))
 					.limit(1);
 
 				if (user.length === 0) {
@@ -293,12 +446,18 @@ export const verifyLoginCodeAndAuthenticate = createServerFn({
 					};
 				}
 
+				// Mark attempt as used
+				await db
+					.update(userAuthAttempts)
+					.set({ used: true })
+					.where(eq(userAuthAttempts.id, attempt.id));
+
 				// Mark rate limit attempt as successful
 				const tokenHash = hashJWT(data.token);
 				await markAttemptSuccessful(tokenHash, "login-code");
 
 				// Set authentication cookie
-				await setAuthCookie(payload.userId);
+				await setAuthCookie(attempt.userId);
 
 				return {
 					success: true,
@@ -306,7 +465,7 @@ export const verifyLoginCodeAndAuthenticate = createServerFn({
 				};
 			}
 
-			// If email exists (no userId), code verification will always fail
+			// If no userId, code verification will always fail (account doesn't exist)
 			// Return generic error to prevent enumeration
 			return {
 				success: false,

@@ -25,7 +25,7 @@ Here is the detailed comparison.
     *   **Friction:** Higher than method #1. The user has to type their email address every time, which is redundant since the passkey already contains the user identity.
     *   *Note:* If this is used as a true "Second Factor" (requiring a password first), the security is slightly higher but usability drops significantly. If used as "Passwordless 2-Step," it is strictly worse than Method #1.
 
-### 3. Magic Link (Standard)
+### 3. Magic Link (Standard) - Not Recommended
 *User enters Email -> Generic "Check your email" message -> Clicks Link -> Logged in.*
 
 *   **Security:** **Moderate**
@@ -35,6 +35,8 @@ Here is the detailed comparison.
 *   **Usability:** **Low**
     *   **Friction:** High. Requires context switching (App -> Email -> App).
     *   **Delivery Issues:** Emails often end up in spam or are delayed, leading to user drop-off.
+
+*Note: This implementation uses OTP codes instead of magic links for improved security.*
 
 ### 4. Password + Authenticator App (TOTP)
 *User enters Email + Password -> Enters 6-digit code from App.*
@@ -46,14 +48,22 @@ Here is the detailed comparison.
     *   **Friction:** Very high. Requires identifying, remembering a password, opening a separate app, and typing a code.
     *   **Setup:** Requires initial setup (scanning QR codes), which has high abandonment rates.
 
-### 5. Email OTP (Session Bound)
-*User enters Email -> Receives code -> Enters code in **same** browser tab.*
+### 5. Email OTP (Session Bound) - **Current Implementation**
+*User enters Email -> Receives 8-character alphanumeric code -> Enters code in **same** browser tab.*
 
 *   **Security:** **Moderate to High**
     *   **Phishing:** Better than Magic Links. Because the user must enter the code into the *original* page, it is harder for an attacker to trigger the flow and hijack it unless they are actively proxying the user's session (MITM).
     *   **Session Binding:** Enforcing the code entry in the same session prevents "link forwarding" attacks.
+    *   **Code Storage:** Codes are hashed and stored in the database, not in the JWT token, providing additional security.
+    *   **Code Format:** 8-character alphanumeric codes (A-Z, 0-9) provide significantly better security than 6-digit numeric codes.
+        *   **Security Rationale:** Unlike 2FA authenticator apps (which are secondary authentication), OTP codes in this system are the **primary authentication method**. This requires substantially higher security.
+        *   **Entropy Comparison:**
+            *   6-digit numeric: 10^6 = **1,000,000** possible combinations
+            *   8-character alphanumeric: 36^8 = **2,821,109,907,456** possible combinations (2.8 trillion)
+        *   **Security Improvement:** The 8-character alphanumeric format provides approximately **2.8 million times** more entropy than 6-digit numeric codes, making brute-force attacks computationally infeasible even with rate limiting disabled.
+        *   **Why This Matters:** Since OTP codes are the sole authentication factor (not a secondary factor like in 2FA), they must withstand brute-force attempts. The larger keyspace ensures that even if an attacker gains access to the verification endpoint, they cannot feasibly guess valid codes within the 15-minute expiration window.
 *   **Usability:** **Moderate**
-    *   **Friction:** High (Context switching).
+    *   **Friction:** Moderate (Context switching, but cross-device friendly).
     *   **Cross-Device:** Easier than "Cookie Bound" links (below) because you can read the code on your phone and type it into your desktop.
 
 ### 6. Magic Link (Cookie/Device Bound)
@@ -79,4 +89,4 @@ Here is the detailed comparison.
 **Recommendation:**
 For a modern application, **Method #1 (Passkeys)** is the gold standard.
 
-If you must support email-based fallback (since passkeys aren't on 100% of devices yet), **Method #5 (Email OTP)** is the best balance. It prevents the usability disaster of "Cookie Bound Links" (Method #6) while offering better security than standard links by forcing the user to complete the loop in the original context.
+If you must support email-based fallback (since passkeys aren't on 100% of devices yet), **Method #5 (Email OTP)** is the best balance. This implementation uses 8-character alphanumeric OTP codes stored securely in the database, preventing the usability disaster of "Cookie Bound Links" (Method #6) while offering better security than standard magic links by forcing the user to complete the loop in the original context.

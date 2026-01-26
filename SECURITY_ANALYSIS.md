@@ -6,7 +6,7 @@ The current login implementation in `passwordless-demo` is **High Quality** and 
 
 It successfully implements:
 1.  **Method #1 (Passkey with User Discovery)**: A secure, phishing-resistant, and user-friendly login flow.
-2.  **Method #5 (Email OTP)**: A robust fallback method that avoids the common pitfalls of magic links (like cross-device issues).
+2.  **Method #5 (Email OTP)**: A robust fallback method using 8-character alphanumeric OTP codes that avoids the common pitfalls of magic links (like cross-device issues).
 
 **CRITICAL UPDATE:** The previous vulnerability in Session Management (unsigned cookies) has been **FIXED**. The application now uses signed JWTs for session cookies.
 
@@ -22,13 +22,21 @@ The implementation of passkeys (`src/server/passkey.ts`) is excellent and secure
 ### B. Email OTP Implementation (Modified Method #5)
 The implementation (`src/server/auth.ts`) uses a robust "Token + Code" approach that balances security and usability.
 *   **Enumeration Protection:** The system is fully resistant to user enumeration.
-    *   `requestLoginCode` always returns a `success: true` and a token.
-    *   If the user does not exist, it generates a `randomCodeHash` and simulates the work to prevent timing attacks.
+    *   `requestLoginCode` always returns a `success: true` and a token, regardless of whether the account exists.
+    *   If the user does not exist, it still creates a `userAuthAttempts` record to prevent timing attacks.
 *   **The "Token + Code" Flow:**
     *   Instead of binding the session to a browser cookie (which causes cross-device issues), the session is bound to a signed JWT `codeVerificationToken` passed in the URL.
-    *   **Security:** This is secure because possession of the link alone is insufficient; the user also needs the 6-digit code from the email.
+    *   **Security:** This is secure because possession of the link alone is insufficient; the user also needs the 8-character alphanumeric code from the email.
     *   **Usability:** This solves the "Cross-Device" problem (Method #6). A user can open the link on a desktop and read the code from their phone.
-*   **Code Hashing:** OTP codes are hashed (`SHA-256`) before being stored in the JWT payload, ensuring that even if the token is decoded, the code is not revealed.
+*   **Code Storage:** OTP codes are hashed (`SHA-256`) and stored in the `userAuthAttempts` database table, not in the JWT. The JWT only contains a `userAuthAttemptId` reference, ensuring that even if the token is decoded, the code is not revealed.
+*   **Code Format:** Uses 8-character alphanumeric codes (A-Z, 0-9) for significantly improved security compared to 6-digit numeric codes.
+    *   **Security Rationale:** Unlike 2FA authenticator apps (which are secondary authentication), OTP codes in this system are the **primary authentication method**. This requires substantially higher security.
+    *   **Entropy Comparison:**
+        *   6-digit numeric: 10^6 = **1,000,000** possible combinations
+        *   8-character alphanumeric: 36^8 = **2,821,109,907,456** possible combinations (2.8 trillion)
+    *   **Security Improvement:** The 8-character alphanumeric format provides approximately **2.8 million times** more entropy than 6-digit numeric codes, making brute-force attacks computationally infeasible even with rate limiting disabled.
+    *   **Why This Matters:** Since OTP codes are the sole authentication factor (not a secondary factor like in 2FA), they must withstand brute-force attempts. The larger keyspace ensures that even if an attacker gains access to the verification endpoint, they cannot feasibly guess valid codes within the 15-minute expiration window.
+*   **Single Use:** Codes are marked as `used` after successful verification and expire after 15 minutes.
 
 ## 2. Security Controls
 
@@ -42,7 +50,7 @@ The application now securely handles user sessions (`src/lib/auth.ts`, `src/serv
 The project implements a persistent, database-backed rate limiting system (`src/server/rateLimit.ts`).
 *   **Granularity:** Limits are applied per IP and per Email/Identifier.
 *   **Persistence:** Uses a `rate_limits` table, making it robust against server restarts.
-*   **Coverage:** Covers all critical endpoints (`signup`, `login-code`, `passkey-attempt`, `email-lookup`).
+*   **Coverage:** Covers all critical endpoints (`signup-otp`, `login-code`, `passkey-attempt`, `email-lookup`).
 
 ### Input Validation
 *   **Schema Validation:** Extensive use of `zod` in server functions ensures strict type checking and input sanitization before processing.

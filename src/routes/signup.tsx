@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +13,9 @@ import {
 	FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { signup } from "@/server/auth";
+import { requestSignupOTP } from "@/server/auth";
 import { getUserWithPasskey } from "@/server/user";
+import { useToastMutation } from "@/hooks/useToastMutation";
 
 // Zod schema for form validation
 const signupSchema = z.object({
@@ -43,7 +45,26 @@ export const Route = createFileRoute("/signup")({
 
 function SignupPage() {
 	const router = useRouter();
-	const signupFn = useServerFn(signup);
+	const requestSignupOTPFn = useServerFn(requestSignupOTP);
+	const [formError, setFormError] = useState<string>();
+
+	const signupMutation = useToastMutation({
+		action: "Request signup code",
+		mutationFn: async (variables: { name: string; email: string }) => {
+			const result = await requestSignupOTPFn({ data: variables });
+			return result;
+		},
+		onSuccess: async (result) => {
+			// Navigate to OTP verification page with token
+			if (result.token) {
+				await router.navigate({
+					to: "/signup/$signupToken",
+					params: { signupToken: result.token },
+				});
+			}
+		},
+		setFormError,
+	});
 
 	const form = useForm({
 		defaultValues: {
@@ -54,9 +75,7 @@ function SignupPage() {
 			onChange: signupSchema,
 		},
 		onSubmit: async ({ value }) => {
-			await signupFn({ data: value });
-			// Navigate to check-email page on success
-			await router.navigate({ to: "/signup-check-email" });
+			await signupMutation.mutateAsync(value);
 		},
 	});
 
@@ -117,7 +136,7 @@ function SignupPage() {
 												placeholder="john@example.com"
 											/>
 											<FieldDescription>
-												We'll send you a verification link to this email address
+												We'll send you a verification code to this email address
 											</FieldDescription>
 											{field.state.meta.errors.length > 0 && (
 												<FieldError>{field.state.meta.errors[0]}</FieldError>
@@ -125,6 +144,8 @@ function SignupPage() {
 										</Field>
 									)}
 								</form.Field>
+
+								{formError && <FieldError>{formError}</FieldError>}
 
 								{form.state.submissionAttempts > 0 &&
 									form.state.submissionStatus === "error" && (
@@ -137,10 +158,10 @@ function SignupPage() {
 								<Field>
 									<Button
 										type="submit"
-										disabled={form.state.isSubmitting}
+										disabled={form.state.isSubmitting || signupMutation.isPending}
 										className="w-full"
 									>
-										{form.state.isSubmitting ? "Signing up..." : "Sign Up"}
+										{form.state.isSubmitting || signupMutation.isPending ? "Sending Code..." : "Sign Up"}
 									</Button>
 								</Field>
 							</FieldGroup>

@@ -1,96 +1,167 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { FieldError, FieldGroup, FieldSet } from "@/components/ui/field";
-import { verifySignupTokenAndCreateUser } from "@/server/auth";
+import { useForm } from "@tanstack/react-form";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import {
+	Field,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
+import {
+	InputOTP,
+	InputOTPGroup,
+	InputOTPSlot,
+} from "@/components/ui/input-otp";
+import { InvalidLink } from "@/components/auth/InvalidLink";
+import { AuthLayout } from "@/components/layout/AuthLayout";
+import { useToastMutation } from "@/hooks/useToastMutation";
+import { verifySignupOTPAndCreateUser } from "@/server/auth";
+import { verifyCodeVerificationToken } from "@/server/jwt";
 
 export const Route = createFileRoute("/signup/$signupToken")({
 	beforeLoad: async ({ params }) => {
-		// Verify token and create user in beforeLoad
-		// This ensures user is created before route loads
-		return await verifySignupTokenAndCreateUser({
-			data: { token: params.signupToken },
-		});
+		try {
+			// Verify token exists and is valid format (but don't create user yet)
+			await verifyCodeVerificationToken(params.signupToken);
+			return { tokenValid: true };
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error
+					? error.message
+					: "Invalid or expired verification token.";
+			return { tokenValid: false, error: errorMessage };
+		}
 	},
-	loader: async ({ context }) => {
-		return context;
-	},
+	loader: async ({ context: { tokenValid, error } }) => ({
+		tokenValid,
+		error,
+	}),
 	component: SignupPage,
 });
 
 function SignupPage() {
-	const result = Route.useLoaderData();
+	const { tokenValid, error } = Route.useLoaderData();
+	const { signupToken } = Route.useParams();
+	const router = useRouter();
+	const navigate = useNavigate();
+	const [formError, setFormError] = useState<string>();
+	const verifySignupFn = useServerFn(verifySignupOTPAndCreateUser);
+
+	const verifyCodeMutation = useToastMutation({
+		action: "Verify signup code",
+		mutationFn: async (variables: { code: string }) => {
+			const result = await verifySignupFn({
+				data: {
+					token: signupToken,
+					code: variables.code.toUpperCase(),
+				},
+			});
+			return result;
+		},
+		onSuccess: async () => {
+			// Success - session is updated by server function
+			await router.invalidate();
+			await navigate({
+				to: "/user-settings",
+				reloadDocument: true,
+			});
+		},
+		setFormError,
+	});
+
+	const form = useForm({
+		defaultValues: {
+			code: "",
+		},
+		validators: {
+			onChange: z.object({
+				code: z.string().length(8, "Code must be 8 characters").regex(/^[A-Z0-9]{8}$/, "Code must be alphanumeric (A-Z, 0-9)"),
+			}),
+		},
+		onSubmit: async ({ value }) => {
+			await verifyCodeMutation.mutateAsync(value);
+		},
+	});
+
+	if (!tokenValid) {
+		return (
+			<InvalidLink
+				message={
+					error ||
+					"This verification token is invalid or has expired. Please request a new code."
+				}
+				title="Invalid Verification Token"
+			/>
+		);
+	}
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-			<div className="w-full max-w-md">
-				<FieldSet className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
-					<FieldGroup>
-						{result.success ? (
-							<div className="text-center">
-								<div className="mb-6">
-									<div className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-										<svg
-											className="w-8 h-8 text-green-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M5 13l4 4L19 7"
-											/>
-										</svg>
-									</div>
-									<h1 className="text-3xl font-bold text-white mb-2">
-										Signup Confirmed
-									</h1>
-									<p className="text-gray-400">
-										Your account has been successfully created!
-									</p>
-									{result.user && (
-										<div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
-											<p className="text-sm text-gray-300">
-												<strong>Name:</strong> {result.user.name}
-											</p>
-											<p className="text-sm text-gray-300">
-												<strong>Email:</strong> {result.user.email}
-											</p>
-										</div>
-									)}
-								</div>
-							</div>
-						) : (
-							<div className="text-center">
-								<div className="mb-6">
-									<div className="mx-auto w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
-										<svg
-											className="w-8 h-8 text-red-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M6 18L18 6M6 6l12 12"
-											/>
-										</svg>
-									</div>
-									<h1 className="text-3xl font-bold text-white mb-2">
-										Signup Failed
-									</h1>
-									<FieldError className="mt-4">
-										{result.error ||
-											"The signup link is invalid or has expired. Please request a new verification email."}
-									</FieldError>
-								</div>
-							</div>
-						)}
-					</FieldGroup>
-				</FieldSet>
+		<AuthLayout title="Enter Verification Code">
+			<div className="mb-6 text-center">
+				<p className="text-gray-400">
+					Check your email for the 8-character verification code
+				</p>
 			</div>
-		</div>
+			<form
+				onSubmit={async (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					await form.handleSubmit();
+				}}
+			>
+				<FieldGroup>
+					<form.Field name="code">
+						{(field) => (
+							<Field data-invalid={field.state.meta.errors.length > 0}>
+								<FieldLabel htmlFor={field.name}>
+									Enter the 8-character code sent to your email
+								</FieldLabel>
+								<InputOTP
+									maxLength={8}
+									value={field.state.value.toUpperCase()}
+									onChange={(value) => field.handleChange(value.toUpperCase())}
+									disabled={verifyCodeMutation.isPending}
+								>
+									<InputOTPGroup>
+										<InputOTPSlot index={0} />
+										<InputOTPSlot index={1} />
+										<InputOTPSlot index={2} />
+										<InputOTPSlot index={3} />
+										<InputOTPSlot index={4} />
+										<InputOTPSlot index={5} />
+										<InputOTPSlot index={6} />
+										<InputOTPSlot index={7} />
+									</InputOTPGroup>
+								</InputOTP>
+								{field.state.meta.errors.length > 0 && (
+									<FieldError>{field.state.meta.errors[0]}</FieldError>
+								)}
+							</Field>
+						)}
+					</form.Field>
+
+					{formError && <FieldError>{formError}</FieldError>}
+
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting]}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<Field>
+								<Button
+									type="submit"
+									disabled={!canSubmit || isSubmitting}
+									className="w-full"
+								>
+									{isSubmitting ? "Verifying Code..." : "Verify Code"}
+								</Button>
+							</Field>
+						)}
+					</form.Subscribe>
+				</FieldGroup>
+			</form>
+		</AuthLayout>
 	);
 }

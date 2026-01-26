@@ -2,10 +2,16 @@ Welcome to your new TanStack app!
 
 # Getting Started
 
-To run this application:
+To set up this project for the first time:
 
 ```bash
 pnpm install
+pnpm setup-db
+```
+
+To run this application:
+
+```bash
 pnpm dev
 ```
 

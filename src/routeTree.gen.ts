@@ -10,24 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UserSettingsRouteImport } from './routes/user-settings'
-import { Route as SignupCheckEmailRouteImport } from './routes/signup-check-email'
 import { Route as SignupRouteImport } from './routes/signup'
-import { Route as LoginVerificationRouteImport } from './routes/login-verification'
-import { Route as LoginCheckEmailRouteImport } from './routes/login-check-email'
+import { Route as LogoutRouteImport } from './routes/logout'
+import { Route as LoginRequestCodeRouteImport } from './routes/login-request-code'
+import { Route as LoginPasskeyRouteImport } from './routes/login-passkey'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignupSignupTokenRouteImport } from './routes/signup.$signupToken'
-import { Route as LoginViaLinkLoginLinkTokenRouteImport } from './routes/login-via-link.$loginLinkToken'
-import { Route as LoginPasskeyPasskeyTokenRouteImport } from './routes/login-passkey.$passkeyToken'
+import { Route as LoginViaCodeCodeVerificationTokenRouteImport } from './routes/login-via-code.$codeVerificationToken'
 
 const UserSettingsRoute = UserSettingsRouteImport.update({
   id: '/user-settings',
   path: '/user-settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignupCheckEmailRoute = SignupCheckEmailRouteImport.update({
-  id: '/signup-check-email',
-  path: '/signup-check-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -35,14 +29,19 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginVerificationRoute = LoginVerificationRouteImport.update({
-  id: '/login-verification',
-  path: '/login-verification',
+const LogoutRoute = LogoutRouteImport.update({
+  id: '/logout',
+  path: '/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginCheckEmailRoute = LoginCheckEmailRouteImport.update({
-  id: '/login-check-email',
-  path: '/login-check-email',
+const LoginRequestCodeRoute = LoginRequestCodeRouteImport.update({
+  id: '/login-request-code',
+  path: '/login-request-code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginPasskeyRoute = LoginPasskeyRouteImport.update({
+  id: '/login-passkey',
+  path: '/login-passkey',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -60,54 +59,45 @@ const SignupSignupTokenRoute = SignupSignupTokenRouteImport.update({
   path: '/$signupToken',
   getParentRoute: () => SignupRoute,
 } as any)
-const LoginViaLinkLoginLinkTokenRoute =
-  LoginViaLinkLoginLinkTokenRouteImport.update({
-    id: '/login-via-link/$loginLinkToken',
-    path: '/login-via-link/$loginLinkToken',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const LoginPasskeyPasskeyTokenRoute =
-  LoginPasskeyPasskeyTokenRouteImport.update({
-    id: '/login-passkey/$passkeyToken',
-    path: '/login-passkey/$passkeyToken',
+const LoginViaCodeCodeVerificationTokenRoute =
+  LoginViaCodeCodeVerificationTokenRouteImport.update({
+    id: '/login-via-code/$codeVerificationToken',
+    path: '/login-via-code/$codeVerificationToken',
     getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/login-check-email': typeof LoginCheckEmailRoute
-  '/login-verification': typeof LoginVerificationRoute
+  '/login-passkey': typeof LoginPasskeyRoute
+  '/login-request-code': typeof LoginRequestCodeRoute
+  '/logout': typeof LogoutRoute
   '/signup': typeof SignupRouteWithChildren
-  '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
-  '/login-passkey/$passkeyToken': typeof LoginPasskeyPasskeyTokenRoute
-  '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
+  '/login-via-code/$codeVerificationToken': typeof LoginViaCodeCodeVerificationTokenRoute
   '/signup/$signupToken': typeof SignupSignupTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/login-check-email': typeof LoginCheckEmailRoute
-  '/login-verification': typeof LoginVerificationRoute
+  '/login-passkey': typeof LoginPasskeyRoute
+  '/login-request-code': typeof LoginRequestCodeRoute
+  '/logout': typeof LogoutRoute
   '/signup': typeof SignupRouteWithChildren
-  '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
-  '/login-passkey/$passkeyToken': typeof LoginPasskeyPasskeyTokenRoute
-  '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
+  '/login-via-code/$codeVerificationToken': typeof LoginViaCodeCodeVerificationTokenRoute
   '/signup/$signupToken': typeof SignupSignupTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/login-check-email': typeof LoginCheckEmailRoute
-  '/login-verification': typeof LoginVerificationRoute
+  '/login-passkey': typeof LoginPasskeyRoute
+  '/login-request-code': typeof LoginRequestCodeRoute
+  '/logout': typeof LogoutRoute
   '/signup': typeof SignupRouteWithChildren
-  '/signup-check-email': typeof SignupCheckEmailRoute
   '/user-settings': typeof UserSettingsRoute
-  '/login-passkey/$passkeyToken': typeof LoginPasskeyPasskeyTokenRoute
-  '/login-via-link/$loginLinkToken': typeof LoginViaLinkLoginLinkTokenRoute
+  '/login-via-code/$codeVerificationToken': typeof LoginViaCodeCodeVerificationTokenRoute
   '/signup/$signupToken': typeof SignupSignupTokenRoute
 }
 export interface FileRouteTypes {
@@ -115,50 +105,46 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/login-check-email'
-    | '/login-verification'
+    | '/login-passkey'
+    | '/login-request-code'
+    | '/logout'
     | '/signup'
-    | '/signup-check-email'
     | '/user-settings'
-    | '/login-passkey/$passkeyToken'
-    | '/login-via-link/$loginLinkToken'
+    | '/login-via-code/$codeVerificationToken'
     | '/signup/$signupToken'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
-    | '/login-check-email'
-    | '/login-verification'
+    | '/login-passkey'
+    | '/login-request-code'
+    | '/logout'
     | '/signup'
-    | '/signup-check-email'
     | '/user-settings'
-    | '/login-passkey/$passkeyToken'
-    | '/login-via-link/$loginLinkToken'
+    | '/login-via-code/$codeVerificationToken'
     | '/signup/$signupToken'
   id:
     | '__root__'
     | '/'
     | '/login'
-    | '/login-check-email'
-    | '/login-verification'
+    | '/login-passkey'
+    | '/login-request-code'
+    | '/logout'
     | '/signup'
-    | '/signup-check-email'
     | '/user-settings'
-    | '/login-passkey/$passkeyToken'
-    | '/login-via-link/$loginLinkToken'
+    | '/login-via-code/$codeVerificationToken'
     | '/signup/$signupToken'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
-  LoginCheckEmailRoute: typeof LoginCheckEmailRoute
-  LoginVerificationRoute: typeof LoginVerificationRoute
+  LoginPasskeyRoute: typeof LoginPasskeyRoute
+  LoginRequestCodeRoute: typeof LoginRequestCodeRoute
+  LogoutRoute: typeof LogoutRoute
   SignupRoute: typeof SignupRouteWithChildren
-  SignupCheckEmailRoute: typeof SignupCheckEmailRoute
   UserSettingsRoute: typeof UserSettingsRoute
-  LoginPasskeyPasskeyTokenRoute: typeof LoginPasskeyPasskeyTokenRoute
-  LoginViaLinkLoginLinkTokenRoute: typeof LoginViaLinkLoginLinkTokenRoute
+  LoginViaCodeCodeVerificationTokenRoute: typeof LoginViaCodeCodeVerificationTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -170,13 +156,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signup-check-email': {
-      id: '/signup-check-email'
-      path: '/signup-check-email'
-      fullPath: '/signup-check-email'
-      preLoaderRoute: typeof SignupCheckEmailRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -184,18 +163,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login-verification': {
-      id: '/login-verification'
-      path: '/login-verification'
-      fullPath: '/login-verification'
-      preLoaderRoute: typeof LoginVerificationRouteImport
+    '/logout': {
+      id: '/logout'
+      path: '/logout'
+      fullPath: '/logout'
+      preLoaderRoute: typeof LogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login-check-email': {
-      id: '/login-check-email'
-      path: '/login-check-email'
-      fullPath: '/login-check-email'
-      preLoaderRoute: typeof LoginCheckEmailRouteImport
+    '/login-request-code': {
+      id: '/login-request-code'
+      path: '/login-request-code'
+      fullPath: '/login-request-code'
+      preLoaderRoute: typeof LoginRequestCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login-passkey': {
+      id: '/login-passkey'
+      path: '/login-passkey'
+      fullPath: '/login-passkey'
+      preLoaderRoute: typeof LoginPasskeyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -219,18 +205,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupSignupTokenRouteImport
       parentRoute: typeof SignupRoute
     }
-    '/login-via-link/$loginLinkToken': {
-      id: '/login-via-link/$loginLinkToken'
-      path: '/login-via-link/$loginLinkToken'
-      fullPath: '/login-via-link/$loginLinkToken'
-      preLoaderRoute: typeof LoginViaLinkLoginLinkTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login-passkey/$passkeyToken': {
-      id: '/login-passkey/$passkeyToken'
-      path: '/login-passkey/$passkeyToken'
-      fullPath: '/login-passkey/$passkeyToken'
-      preLoaderRoute: typeof LoginPasskeyPasskeyTokenRouteImport
+    '/login-via-code/$codeVerificationToken': {
+      id: '/login-via-code/$codeVerificationToken'
+      path: '/login-via-code/$codeVerificationToken'
+      fullPath: '/login-via-code/$codeVerificationToken'
+      preLoaderRoute: typeof LoginViaCodeCodeVerificationTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -250,13 +229,13 @@ const SignupRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
-  LoginCheckEmailRoute: LoginCheckEmailRoute,
-  LoginVerificationRoute: LoginVerificationRoute,
+  LoginPasskeyRoute: LoginPasskeyRoute,
+  LoginRequestCodeRoute: LoginRequestCodeRoute,
+  LogoutRoute: LogoutRoute,
   SignupRoute: SignupRouteWithChildren,
-  SignupCheckEmailRoute: SignupCheckEmailRoute,
   UserSettingsRoute: UserSettingsRoute,
-  LoginPasskeyPasskeyTokenRoute: LoginPasskeyPasskeyTokenRoute,
-  LoginViaLinkLoginLinkTokenRoute: LoginViaLinkLoginLinkTokenRoute,
+  LoginViaCodeCodeVerificationTokenRoute:
+    LoginViaCodeCodeVerificationTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -8,7 +8,7 @@ import { rateLimits } from "@/db/schema";
  * Rate limit configuration
  */
 const RATE_LIMIT_CONFIG = {
-	signup: {
+	"signup-otp": {
 		maxRequests: 5,
 		windowMs: 60 * 60 * 1000, // 1 hour
 	},

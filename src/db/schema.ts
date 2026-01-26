@@ -38,3 +38,17 @@ export const rateLimits = sqliteTable("rate_limits", {
 		.notNull()
 		.$defaultFn(() => new Date()),
 });
+
+export const userAuthAttempts = sqliteTable("user_auth_attempts", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	email: text("email").notNull(),
+	name: text("name"), // nullable - only present for signup attempts
+	userId: integer("user_id"), // nullable - null if account doesn't exist yet
+	codeHash: text("code_hash").notNull(), // SHA-256 hash of the OTP code
+	purpose: text("purpose").notNull(), // 'login' or 'signup'
+	expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+	used: integer("used", { mode: "boolean" }).notNull().default(false),
+	createdAt: integer("created_at", { mode: "timestamp" })
+		.notNull()
+		.$defaultFn(() => new Date()),
+});

@@ -2,20 +2,9 @@ import { jwtVerify, SignJWT } from "jose";
 import { getEnvConfig } from "./env";
 
 // Token expiration times (in seconds)
-const SIGNUP_TOKEN_EXPIRATION = 24 * 60 * 60; // 24 hours
 const CODE_VERIFICATION_TOKEN_EXPIRATION = 15 * 60; // 15 minutes
 const PASSKEY_CHALLENGE_TOKEN_EXPIRATION = 10 * 60; // 10 minutes
 const SESSION_TOKEN_EXPIRATION = 60 * 60 * 24 * 30; // 30 days
-
-/**
- * Signup token payload
- */
-export interface SignupTokenPayload {
-	name: string;
-	email: string;
-	iat: number;
-	exp: number;
-}
 
 /**
  * Code verification token payload
@@ -23,7 +12,7 @@ export interface SignupTokenPayload {
 export interface CodeVerificationTokenPayload {
 	userId?: number; // Present if account exists
 	email?: string; // Present if account doesn't exist
-	codeHash: string; // Always present
+	userAuthAttemptId: number; // ID of the userAuthAttempts record
 	iat: number;
 	exp: number;
 }
@@ -58,80 +47,22 @@ export interface SessionTokenPayload {
 }
 
 /**
- * Creates a JWT token for signup verification
- * @param name - User's name
- * @param email - User's email
- * @returns Signed JWT token string
- */
-export async function signSignupToken(
-	name: string,
-	email: string,
-): Promise<string> {
-	const env = getEnvConfig();
-	const secret = new TextEncoder().encode(env.JWT_SECRET);
-	const now = Math.floor(Date.now() / 1000);
-
-	const token = await new SignJWT({ name, email })
-		.setProtectedHeader({ alg: "HS256" })
-		.setIssuedAt(now)
-		.setExpirationTime(now + SIGNUP_TOKEN_EXPIRATION)
-		.sign(secret);
-
-	return token;
-}
-
-/**
- * Verifies and extracts payload from a signup token
- * @param token - JWT token string
- * @returns Token payload if valid, throws error if invalid/expired
- */
-export async function verifySignupToken(
-	token: string,
-): Promise<SignupTokenPayload> {
-	const env = getEnvConfig();
-	const secret = new TextEncoder().encode(env.JWT_SECRET);
-
-	try {
-		const { payload } = await jwtVerify(token, secret, {
-			algorithms: ["HS256"],
-		});
-
-		// Validate payload structure
-		if (typeof payload.name !== "string" || typeof payload.email !== "string") {
-			throw new Error("Invalid token payload structure");
-		}
-
-		return {
-			name: payload.name,
-			email: payload.email,
-			iat: payload.iat as number,
-			exp: payload.exp as number,
-		};
-	} catch (error) {
-		if (error instanceof Error) {
-			throw new Error(`Token verification failed: ${error.message}`);
-		}
-		throw new Error("Token verification failed: Unknown error");
-	}
-}
-
-/**
  * Creates a JWT token for code verification
  * @param userId - User's ID (null if account doesn't exist)
  * @param email - User's email (always required)
- * @param codeHash - Hashed OTP code
+ * @param userAuthAttemptId - ID of the userAuthAttempts record
  * @returns Signed JWT token string
  */
 export async function signCodeVerificationToken(
 	userId: number | null,
 	email: string,
-	codeHash: string,
+	userAuthAttemptId: number,
 ): Promise<string> {
 	const env = getEnvConfig();
 	const secret = new TextEncoder().encode(env.JWT_SECRET);
 	const now = Math.floor(Date.now() / 1000);
 
-	const payload: Record<string, unknown> = { codeHash };
+	const payload: Record<string, unknown> = { userAuthAttemptId };
 	if (userId !== null) {
 		payload.userId = userId;
 	} else {
@@ -164,8 +95,8 @@ export async function verifyCodeVerificationToken(
 		});
 
 		// Validate payload structure
-		if (typeof payload.codeHash !== "string") {
-			throw new Error("Invalid token payload structure");
+		if (typeof payload.userAuthAttemptId !== "number") {
+			throw new Error("Invalid token payload structure: missing userAuthAttemptId");
 		}
 
 		// Either userId or email must be present, but not both
@@ -183,7 +114,7 @@ export async function verifyCodeVerificationToken(
 		return {
 			userId: hasUserId ? payload.userId as number : undefined,
 			email: hasEmail ? payload.email as string : undefined,
-			codeHash: payload.codeHash,
+			userAuthAttemptId: payload.userAuthAttemptId as number,
 			iat: payload.iat as number,
 			exp: payload.exp as number,
 		};
