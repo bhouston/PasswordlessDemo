@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getRequestIP } from "@tanstack/react-start/server";
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
 import { rateLimits } from "@/db/schema";
 
@@ -59,23 +59,6 @@ function getClientIP(): string {
 	} catch {
 		return "unknown";
 	}
-}
-
-/**
- * Clean up old rate limit records (older than the window)
- */
-async function cleanupOldRecords(endpoint: EndpointType) {
-	const config = RATE_LIMIT_CONFIG[endpoint];
-	const cutoffTime = Date.now() - config.windowMs;
-
-	await db.delete(rateLimits).where(
-		and(
-			eq(rateLimits.endpoint, endpoint),
-			// Delete records older than the window
-			// SQLite stores timestamps as integers (milliseconds)
-			lt(rateLimits.windowStart, new Date(cutoffTime)),
-		),
-	);
 }
 
 /**

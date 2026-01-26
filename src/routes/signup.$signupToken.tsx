@@ -137,7 +137,7 @@ function SignupPage() {
 									</InputOTPGroup>
 								</InputOTP>
 								{field.state.meta.errors.length > 0 && (
-									<FieldError>{field.state.meta.errors[0]}</FieldError>
+									<FieldError>{field.state.meta.errors[0]?.message}</FieldError>
 								)}
 							</Field>
 						)}

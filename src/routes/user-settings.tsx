@@ -2,6 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { z } from "zod";
 import { PasskeyComponent } from "@/components/PasskeyComponent";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export const Route = createFileRoute("/user-settings")({
 function UserSettingsPage() {
 	const { user, hasPasskey } = Route.useLoaderData();
 	const updateUserNameFn = useServerFn(updateUserName);
+	const [formError, setFormError] = useState<string>();
 
 	// Mutation for updating user name
 	const updateNameMutation = useMutation({
@@ -67,9 +69,9 @@ function UserSettingsPage() {
 				const result = await updateNameMutation.mutateAsync(value);
 				// Update form default values to reflect the saved state
 				form.setFieldValue("name", result.user.name);
+				setFormError(undefined);
 			} catch (error) {
-				form.setFieldError(
-					"name",
+				setFormError(
 					error instanceof Error
 						? error.message
 						: "An error occurred. Please try again.",
@@ -129,12 +131,14 @@ function UserSettingsPage() {
 													<FieldDescription>Your display name</FieldDescription>
 													{field.state.meta.errors.length > 0 && (
 														<FieldError>
-															{field.state.meta.errors[0]}
+															{field.state.meta.errors[0]?.message}
 														</FieldError>
 													)}
 												</Field>
 											)}
 										</form.Field>
+
+										{formError && <FieldError>{formError}</FieldError>}
 
 										{updateNameMutation.isError && (
 											<FieldError>

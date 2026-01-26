@@ -12,7 +12,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { passkeys, users } from "@/db/schema";
+import { passkeys } from "@/db/schema";
 import { setAuthCookie } from "@/lib/auth";
 import { getEnvConfig } from "./env";
 import {
@@ -23,7 +23,6 @@ import {
 } from "./jwt";
 import { requireUser } from "./middleware";
 import {
-	checkEmailRateLimit,
 	checkIPRateLimit,
 	hashJWT,
 	markAttemptSuccessful,

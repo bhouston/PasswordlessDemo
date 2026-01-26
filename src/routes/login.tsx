@@ -2,7 +2,6 @@ import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-ro
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { AuthLayout } from "@/components/layout/AuthLayout";
-import { useSessionUser } from "@/hooks/useSessionUser";
 import { redirectToSchema } from "@/lib/schemas";
 import { getUserWithPasskey } from "@/server/user";
 

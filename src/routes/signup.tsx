@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form";
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { z } from "zod";
@@ -13,9 +13,9 @@ import {
 	FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useToastMutation } from "@/hooks/useToastMutation";
 import { requestSignupOTP } from "@/server/auth";
 import { getUserWithPasskey } from "@/server/user";
-import { useToastMutation } from "@/hooks/useToastMutation";
 
 // Zod schema for form validation
 const signupSchema = z.object({
@@ -44,24 +44,41 @@ export const Route = createFileRoute("/signup")({
 });
 
 function SignupPage() {
-	const router = useRouter();
+	const navigate = useNavigate();
 	const requestSignupOTPFn = useServerFn(requestSignupOTP);
 	const [formError, setFormError] = useState<string>();
 
 	const signupMutation = useToastMutation({
 		action: "Request signup code",
+		toastSuccess: false, // Don't show toast since we're navigating
 		mutationFn: async (variables: { name: string; email: string }) => {
 			const result = await requestSignupOTPFn({ data: variables });
+			console.log("Signup mutation result:", result);
 			return result;
 		},
 		onSuccess: async (result) => {
+			console.log("Signup onSuccess called with:", result);
 			// Navigate to OTP verification page with token
-			if (result.token) {
-				await router.navigate({
-					to: "/signup/$signupToken",
-					params: { signupToken: result.token },
-				});
+			const token = result?.token;
+			if (!token) {
+				console.error("No token found in result:", result);
+				setFormError("Failed to get verification token. Please try again.");
+				return;
 			}
+			
+			try {
+				console.log("Navigating to signup token page with token:", token);
+				await navigate({
+					to: "/signup/$signupToken",
+					params: { signupToken: token },
+				});
+			} catch (error) {
+				console.error("Navigation error:", error);
+				setFormError("Failed to navigate to verification page. Please try again.");
+			}
+		},
+		onError: (error) => {
+			console.error("Signup mutation error:", error);
 		},
 		setFormError,
 	});
@@ -115,7 +132,7 @@ function SignupPage() {
 												placeholder="John Doe"
 											/>
 											{field.state.meta.errors.length > 0 && (
-												<FieldError>{field.state.meta.errors[0].message}</FieldError>
+												<FieldError>{field.state.meta.errors[0]?.message}</FieldError>
 											)}
 										</Field>
 									)}
@@ -139,21 +156,13 @@ function SignupPage() {
 												We'll send you a verification code to this email address
 											</FieldDescription>
 											{field.state.meta.errors.length > 0 && (
-												<FieldError>{field.state.meta.errors[0]}</FieldError>
+												<FieldError>{field.state.meta.errors[0]?.message}</FieldError>
 											)}
 										</Field>
 									)}
 								</form.Field>
 
 								{formError && <FieldError>{formError}</FieldError>}
-
-								{form.state.submissionAttempts > 0 &&
-									form.state.submissionStatus === "error" && (
-										<FieldError>
-											{form.state.submissionError?.message ||
-												"An error occurred. Please try again."}
-										</FieldError>
-									)}
 
 								<Field>
 									<Button

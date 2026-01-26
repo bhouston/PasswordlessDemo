@@ -92,7 +92,7 @@ function LoginRequestCodePage() {
 									We'll send you a login code to this email address
 								</FieldDescription>
 								{field.state.meta.errors.length > 0 && (
-									<FieldError>{field.state.meta.errors[0]}</FieldError>
+									<FieldError>{field.state.meta.errors[0]?.message}</FieldError>
 								)}
 							</Field>
 						)}
